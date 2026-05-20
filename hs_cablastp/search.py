@@ -145,6 +145,7 @@ def reconstruct_sequence(db: CompressedDB, node_id: int) -> str:
 class SearchHit:
     node_id: int
     fasta_ref: str       # ref_original_seq for traceback to the source protein
+    qseqid: str          # query identifier from the input FASTA
     pident: float
     length: int
     qstart: int
@@ -255,6 +256,7 @@ def search(
             fine_hits.append(SearchHit(
                 node_id=node_id,
                 fasta_ref=node_ref.get(node_id, ""),
+                qseqid=row[0],
                 pident=float(row[2]),
                 length=int(row[3]),
                 qstart=int(row[6]), qend=int(row[7]),
