@@ -15,16 +15,49 @@ FASTA database ──► compress ──► database directory ──► search 
 
 ### NCBI BLAST+
 
-Both pipelines shell out to the BLAST+ binaries `blastp` and `makeblastdb`. Install them and make sure they're on `PATH`.
+Both pipelines shell out to the BLAST+ binaries `blastp` and `makeblastdb`. `makeblastdb` is the indexer that turns a FASTA file into the `.phr` / `.pin` / `.psq` files `blastp` searches; we call it once per compression (and once more per `hs-cablastp-search` to build a temporary fine DB).
+
+Get BLAST+ from <https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/> (Linux/macOS/Windows binaries). After installing, verify both tools are on `PATH`:
 
 ```bash
 blastp -version
 makeblastdb -version
 ```
 
-If they're not on `PATH`, you'll point at them explicitly via `--blastp` / `--makeblastdb` flags below.
+If they're not on `PATH`, point at them explicitly via the `--blastp` / `--makeblastdb` flags on every CLI invocation.
 
-Get BLAST+ from <https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/> (Linux/macOS/Windows binaries).
+#### Installing on Windows
+
+1. Download `ncbi-blast-<version>+-win64.exe` from the link above.
+2. Run the installer (default location is fine: `C:\Program Files\NCBI\blast-<version>+\`).
+3. The installer adds `C:\Program Files\NCBI\blast-<version>+\bin` to `PATH`. **Open a new PowerShell** so the updated `PATH` is picked up, then:
+
+   ```powershell
+   makeblastdb -version
+   blastp -version
+   ```
+
+If you'd rather not touch `PATH`, pass the full path on each call:
+
+```powershell
+hs-cablastp-compress hs_db data\uniprot_sprot.fasta `
+    --makeblastdb "C:\Program Files\NCBI\blast-2.16.0+\bin\makeblastdb.exe"
+```
+
+#### Installing on macOS / Linux
+
+```bash
+# macOS (Homebrew)
+brew install blast
+
+# Debian / Ubuntu
+sudo apt-get install ncbi-blast+
+
+# RHEL / Fedora
+sudo dnf install ncbi-blast+
+```
+
+Or extract the official tarball from the NCBI FTP link above and put its `bin/` on `PATH`.
 
 ### Python package
 
