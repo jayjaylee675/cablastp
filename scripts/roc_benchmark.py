@@ -11,6 +11,8 @@ Steps:
 5. Compute ROC over (query x dataset) pair universe for each pipeline; report
    AUC and the count of missed ground-truth pairs.
 6. Plot ROC and save bench/roc.png.
+7. Optionally append rows to --summary-csv and --roc-csv for cross-dataset
+   aggregation.
 
 Usage:
     python scripts/roc_benchmark.py \
@@ -18,13 +20,20 @@ Usage:
         --cab-db bench/cab_db \
         --hs-db  bench/hs_db \
         --n-queries 50 \
-        --out bench
+        --out bench \
+        --summary-csv bench/summary.csv \
+        --roc-csv bench/roc_points.csv
 
 `bench/raw_blast_db.*` is built automatically if missing.
+
+Compress timings and DB sizes are external inputs (compression isn't done by
+this script). Pass them with --cab-compress-seconds / --hs-compress-seconds;
+DB size is read from the disk footprint of --cab-db / --hs-db.
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import random
 import shutil
@@ -33,7 +42,7 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
@@ -226,6 +235,20 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("bench"),
                     help="Output directory for the queries FASTA, raw blast db, "
                          "miss lists, ROC PNG, and summary.")
+    ap.add_argument("--summary-csv", type=Path, default=None,
+                    help="Append a per-pipeline summary row to this CSV "
+                         "(created with header if missing).")
+    ap.add_argument("--roc-csv", type=Path, default=None,
+                    help="Append (fpr, tpr) curve points to this CSV "
+                         "(created with header if missing).")
+    ap.add_argument("--cab-compress-seconds", type=float, default=None,
+                    help="Compression wall time for cablastp (informational, "
+                         "written to the summary CSV).")
+    ap.add_argument("--hs-compress-seconds", type=float, default=None,
+                    help="Compression wall time for hs-cablastp.")
+    ap.add_argument("--label", default=None,
+                    help="Dataset label written into the CSVs (defaults to "
+                         "the fasta filename).")
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -261,16 +284,18 @@ def main() -> int:
     cab_scores = run_cablastp_pipeline(
         queries_path, args.cab_db, args.pipeline_evalue,
     )
+    cab_search_seconds = time.perf_counter() - t
     print(f"[3/5] cablastp: {len(cab_scores)} unique hit pairs "
-          f"({time.perf_counter() - t:.1f}s)")
+          f"({cab_search_seconds:.1f}s)")
 
     # 4) Run hs-cablastp.
     t = time.perf_counter()
     hs_scores = run_hs_cablastp_pipeline(
         queries_path, args.hs_db, args.pipeline_evalue,
     )
+    hs_search_seconds = time.perf_counter() - t
     print(f"[4/5] hs-cablastp: {len(hs_scores)} unique hit pairs "
-          f"({time.perf_counter() - t:.1f}s)")
+          f"({hs_search_seconds:.1f}s)")
 
     # Constrain universe to (sampled queries) x (all subjects in fasta).
     universe: Set[Pair] = {(q, s) for q in query_ids for s in subject_set}
@@ -352,7 +377,94 @@ def main() -> int:
     print(f"Missed-hit tables:")
     print(f"  {args.out / 'missed_cablastp.tsv'}")
     print(f"  {args.out / 'missed_hs_cablastp.tsv'}")
+
+    # 6) CSV output (append rows so multiple datasets accumulate).
+    label = args.label or args.fasta.name
+    cab_db_kb = _dir_size_kb(args.cab_db)
+    hs_db_kb = _dir_size_kb(args.hs_db)
+
+    def _safe_div(a: float, b: float) -> float:
+        return a / b if b else 0.0
+
+    summary_rows = [
+        {
+            "dataset": label,
+            "pipeline": "cablastp",
+            "n_queries": args.n_queries,
+            "n_subjects": len(subjects),
+            "universe_pairs": len(universe),
+            "ground_truth_positives": len(gt_positives),
+            "compress_seconds": (args.cab_compress_seconds
+                                 if args.cab_compress_seconds is not None else ""),
+            "db_size_kb": f"{cab_db_kb:.2f}",
+            "search_seconds": f"{cab_search_seconds:.3f}",
+            "total_hit_pairs": len(cab_scores),
+            "true_positives": cab_tp,
+            "missed_pairs": len(cab_missed),
+            "extra_pairs": len(cab_extra),
+            "recall": f"{_safe_div(cab_tp, len(gt_positives)):.6f}",
+            "precision": f"{_safe_div(cab_tp, len(cab_scores)):.6f}",
+            "auc": f"{cab_auc:.6f}",
+        },
+        {
+            "dataset": label,
+            "pipeline": "hs-cablastp",
+            "n_queries": args.n_queries,
+            "n_subjects": len(subjects),
+            "universe_pairs": len(universe),
+            "ground_truth_positives": len(gt_positives),
+            "compress_seconds": (args.hs_compress_seconds
+                                 if args.hs_compress_seconds is not None else ""),
+            "db_size_kb": f"{hs_db_kb:.2f}",
+            "search_seconds": f"{hs_search_seconds:.3f}",
+            "total_hit_pairs": len(hs_scores),
+            "true_positives": hs_tp,
+            "missed_pairs": len(hs_missed),
+            "extra_pairs": len(hs_extra),
+            "recall": f"{_safe_div(hs_tp, len(gt_positives)):.6f}",
+            "precision": f"{_safe_div(hs_tp, len(hs_scores)):.6f}",
+            "auc": f"{hs_auc:.6f}",
+        },
+    ]
+    if args.summary_csv:
+        _append_csv(args.summary_csv, summary_rows)
+        print(f"appended 2 rows to {args.summary_csv}")
+
+    if args.roc_csv:
+        roc_rows: List[Dict[str, object]] = []
+        for fpr, tpr in zip(cab_fpr, cab_tpr):
+            roc_rows.append({"dataset": label, "pipeline": "cablastp",
+                             "fpr": f"{fpr:.6f}", "tpr": f"{tpr:.6f}"})
+        for fpr, tpr in zip(hs_fpr, hs_tpr):
+            roc_rows.append({"dataset": label, "pipeline": "hs-cablastp",
+                             "fpr": f"{fpr:.6f}", "tpr": f"{tpr:.6f}"})
+        _append_csv(args.roc_csv, roc_rows)
+        print(f"appended {len(roc_rows)} rows to {args.roc_csv}")
+
     return 0
+
+
+def _dir_size_kb(path: Path) -> float:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += (Path(root) / f).stat().st_size
+            except OSError:
+                pass
+    return total / 1024.0
+
+
+def _append_csv(path: Path, rows: List[Dict[str, object]]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    with open(path, "a", newline="", encoding="ascii") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        if write_header:
+            writer.writeheader()
+        writer.writerows(rows)
 
 
 if __name__ == "__main__":
