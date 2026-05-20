@@ -7,3 +7,12 @@ TAGS
 *.prof*
 *.stats*
 nr-rand-*
+
+# data files and generated artifacts
+data/uniprot_sprot.fasta
+data/uniprot_sprot.fasta.gz
+query.fasta
+hs_sprot_db/
+hs_cablastp.egg-info/
+hs_cablastp/__pycache__/
+__pycache__/
