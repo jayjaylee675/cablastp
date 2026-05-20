@@ -7,3 +7,11 @@ TAGS
 *.prof*
 *.stats*
 nr-rand-*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local tooling
+.claude/
