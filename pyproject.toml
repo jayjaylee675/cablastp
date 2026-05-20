@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cablastp"
+version = "0.1.0"
+description = "Compressively-accelerated protein BLAST search."
+readme = "README"
+requires-python = ">=3.8"
+license = {text = "GPL-2.0"}
+authors = [
+    {name = "Andrew Gallant"},
+    {name = "Noah Daniels"},
+]
+
+[project.scripts]
+cablastp-compress = "cablastp.commands.compress:main"
+cablastp-decompress = "cablastp.commands.decompress:main"
+cablastp-search = "cablastp.commands.search:main"
+cablastp-psisearch = "cablastp.commands.psisearch:main"
+cablastp-deltasearch = "cablastp.commands.deltasearch:main"
+hs-cablastp-compress = "hs_cablastp.commands.compress:main"
+hs-cablastp-search = "hs_cablastp.commands.search:main"
+
+[tool.setuptools.packages.find]
+include = ["cablastp*", "hs_cablastp*"]
