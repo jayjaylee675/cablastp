@@ -1,0 +1,48 @@
+Opening database in hs_sprot_db...
+	Opening compressed database...
+	Done opening compressed database.
+	Opening coarse database...
+	Done opening coarse database.
+Done opening database in hs_sprot_db.
+
+1000 sequences compressed (198.7256 seqs/sec)2000 sequences compressed (743.4371 seqs/sec)3000 sequences compressed (1501.2122 seqs/sec)4000 sequences compressed (1885.6249 seqs/sec)5000 sequences compressed (1937.2538 seqs/sec)6000 sequences compressed (2243.1313 seqs/sec)
+
+Wrote compressed.
+Wrote compressed.index.
+Writing coarse.links...
+Writing coarse.links.index...
+Writing coarse.fasta...
+Writing coarse.fasta.index...
+Done writing coarse.links (11.815414ms).
+Done writing coarse.links.index (11.882574ms).
+Done writing coarse.fasta (44.652365ms).
+Done writing coarse.fasta.index (44.67209ms).
+Creating blastdb-coarse...
+makeblastdb -dbtype prot -in coarse.fasta -out blastdb-coarse
+Done creating blastdb-coarse.
+
+Forest totals: 13602 nodes | 6885 roots (coarse) | 6717 children (compressed)
+Output dir size: 8.2 MiB
+	Command being timed: "hs-cablastp-compress hs_sprot_db data/orf_trans_all.fasta"
+	User time (seconds): 20.08
+	System time (seconds): 5.97
+	Percent of CPU this job got: 267%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:09.74
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2386448
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2
+	Minor (reclaiming a frame) page faults: 908351
+	Voluntary context switches: 24975
+	Involuntary context switches: 1392
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16976
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
