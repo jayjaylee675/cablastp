@@ -1,0 +1,3 @@
+pipeline,dataset,n_sequences,compress_wall_seconds,compress_peak_rss_mb,db_size_bytes
+cablastp,sprot_5k,5000,114.27,4430.50,4771135
+hs-cablastp,sprot_5k,5000,4390.00,185.58,8680999

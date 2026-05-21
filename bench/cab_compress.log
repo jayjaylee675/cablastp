@@ -1,0 +1,33 @@
+Opening database in bench/cab_db...
+	Opening compressed database...
+	Done opening compressed database.
+	Opening coarse database...
+	Done opening coarse database.
+Done opening database in bench/cab_db.
+
+1000 sequences compressed (61.6383 seqs/sec)2000 sequences compressed (52.2327 seqs/sec)3000 sequences compressed (54.0887 seqs/sec)4000 sequences compressed (54.9982 seqs/sec)5000 sequences compressed (54.9468 seqs/sec)
+
+Wrote compressed.
+Wrote compressed.index.
+Writing coarse.fasta...
+Writing coarse.links...
+Writing coarse.links.index...
+Writing coarse.fasta.index...
+Done writing coarse.links (0.009s).
+Done writing coarse.links.index (0.009s).
+Done writing coarse.fasta (0.024s).
+Done writing coarse.fasta.index (0.024s).
+Creating blastdb-coarse...
+makeblastdb -dbtype prot -in coarse.fasta -out blastdb-coarse
+
+
+Building a new DB, current time: 05/21/2026 03:21:48
+New DB name:   /home/user/cablastp/bench/cab_db/blastdb-coarse
+New DB title:  coarse.fasta
+Sequence type: Protein
+Keep MBits: T
+Maximum file size: 1000000000B
+Adding sequences from FASTA; added 5332 sequences in 0.0777581 seconds.
+
+
+Done creating blastdb-coarse.

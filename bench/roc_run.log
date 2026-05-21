@@ -1,0 +1,21 @@
+[1/5] sampled 50 queries -> bench/queries.fasta
+[2/5] vanilla blastp: 207 rows, 196 unique positive pairs (1.1s)
+[3/5] cablastp: 195 unique hit pairs (3.0s)
+[4/5] hs-cablastp: 199 unique hit pairs (1.3s)
+[5/5] saved ROC plot to bench/roc.png
+
+================================================================
+Dataset: sprot_5k.fasta (5000 subjects)
+Queries: 50  Seed: 42
+Universe: 250000 (query, subject) pairs
+Ground-truth positives: 196
+----------------------------------------------------------------
+pipeline          hits      TP   missed   extra   recall      AUC
+cablastp           195     195        1       0   0.9949   0.9974
+hs-cablastp        199     196        0       3   1.0000   1.0000
+================================================================
+Missed-hit tables:
+  bench/missed_cablastp.tsv
+  bench/missed_hs_cablastp.tsv
+appended 2 rows to bench/summary.csv
+appended 322 rows to bench/roc_points.csv

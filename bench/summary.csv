@@ -1,0 +1,3 @@
+dataset,pipeline,n_queries,n_subjects,universe_pairs,ground_truth_positives,compress_seconds,db_size_kb,search_seconds,total_hit_pairs,true_positives,missed_pairs,extra_pairs,recall,precision,auc
+sprot_5k.fasta,cablastp,50,5000,250000,196,114.27,4659.31,2.999,195,195,1,0,0.994898,1.000000,0.997449
+sprot_5k.fasta,hs-cablastp,50,5000,250000,196,4390.0,8477.54,1.336,199,196,0,3,1.000000,0.984925,1.000000

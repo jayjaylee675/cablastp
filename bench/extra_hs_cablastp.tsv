@@ -1,0 +1,5 @@
+# hs-cablastp hits not in ground truth: 3 pairs
+# qseqid	sseqid	score
+sp|A8QD31|ERB1_MALGO	sp|Q6P2Y2|DAW1_XENTR	37.7
+sp|A8QD31|ERB1_MALGO	sp|Q9UTC7|YIDC_SCHPO	36.6
+sp|Q8C570|RAE1L_MOUSE	sp|B0XYC8|EIF3I_ASPFC	33.9
