@@ -1,0 +1,13 @@
+[1/4] sampled 50 queries -> bench/queries.fasta
+[2/4] vanilla blastp: 207 rows, 196 positives (1.1s)
+[3/4] cablastp: 195 unique hit pairs (2.8s)
+[4/4] saved ROC plot to bench/roc.png
+
+================================================================
+Dataset: sprot_5k.fasta (5000 subjects)
+Ground-truth positives: 196
+cablastp: hits=195, TP=195, missed=1, recall=0.9949, AUC=0.9974
+hs-cablastp: TIMED OUT - no results
+================================================================
+appended 2 rows to bench/summary.csv
+appended 160 rows to bench/roc_points.csv
