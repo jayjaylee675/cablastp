@@ -18,3 +18,9 @@ __pycache__/
 
 # Benchmark / profile outputs (machine-specific)
 bench/
+
+# Large datasets — distributed via GitHub Releases, not git
+data/uniprot_sprot.fasta
+data/uniprot_sprot.fasta/
+data/uniprot_trembl.fasta
+data/uniprot_trembl.fasta/
