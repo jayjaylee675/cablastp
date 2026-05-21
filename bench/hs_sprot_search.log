@@ -1,0 +1,639 @@
+Opening database in hs_sprot_db...
+	Opening compressed database...
+	Done opening compressed database.
+	Opening coarse database...
+	Done opening coarse database.
+Done opening database in hs_sprot_db.
+
+Blasting query on coarse database...
+blastp -db hs_sprot_db/blastdb-coarse -num_threads 4 -outfmt 5 -dbsize 3020248
+Decompressing blast hits...
+Building fine BLAST database...
+Created temporary fine BLAST database in /tmp/cablastp-fine-search-db785043128
+makeblastdb -dbtype prot -title blastdb-fine -in - -out /tmp/cablastp-fine-search-db785043128/blastdb-fine
+Blasting query on fine database...
+blastp -db /tmp/cablastp-fine-search-db785043128/blastdb-fine -dbsize 3020248 -num_threads 4
+BLASTP 2.12.0+
+
+
+Reference: Stephen F. Altschul, Thomas L. Madden, Alejandro A.
+Schaffer, Jinghui Zhang, Zheng Zhang, Webb Miller, and David J.
+Lipman (1997), "Gapped BLAST and PSI-BLAST: a new generation of
+protein database search programs", Nucleic Acids Res. 25:3389-3402.
+
+
+Reference for composition-based statistics: Alejandro A. Schaffer,
+L. Aravind, Thomas L. Madden, Sergei Shavirin, John L. Spouge, Yuri
+I. Wolf, Eugene V. Koonin, and Stephen F. Altschul (2001),
+"Improving the accuracy of PSI-BLAST protein database searches with
+composition-based statistics and other refinements", Nucleic Acids
+Res. 29:2994-3005.
+
+
+
+Database: blastdb-fine
+           17 sequences; 7,964 total letters
+
+
+
+Query= YFL039C ACT1 SGDID:S000001855, Chr VI from 54377-53260,54696-54687,
+Genome Release 64-1-1, reverse complement, Verified ORF, "Actin,
+structural protein involved in cell polarization, endocytosis, and
+other cytoskeletal functions"
+
+Length=375
+                                                                      Score     E
+Sequences producing significant alignments:                          (Bits)  Value
+
+YFL039C ACT1 SGDID:S000001855, Chr VI from 54377-53260,54696-5468...  783     0.0   
+YHR129C ARP1 SGDID:S000001171, Chr VIII from 364153-362999, Genom...  366     3e-126
+YDL029W ARP2 SGDID:S000002187, Chr IV from 399340-399361,399485-4...  363     8e-125
+YJR065C ARP3 SGDID:S000003826, Chr X from 559158-557809, Genome R...  243     2e-77 
+YLR085C ARP6 SGDID:S000004075, Chr XII from 301989-300673, Genome...  102     1e-24 
+YNL059C ARP5 SGDID:S000005004, Chr XIV from 514935-512668, Genome...  102     2e-24 
+YJL081C ARP4 SGDID:S000003617, Chr X from 285271-283802, Genome R...  99.8    1e-23 
+YPR034W ARP7 SGDID:S000006238, Chr XVI from 639525-640958, Genome...  82.4    9e-18 
+YMR033W ARP9 SGDID:S000004636, Chr XIII from 337788-337817,337904...  43.5    3e-05 
+YOR141C ARP8 SGDID:S000005667, Chr XV from 592587-589942, Genome ...  37.0    0.004 
+YDR106W ARP10 SGDID:S000002513, Chr IV from 667004-667858, Genome...  34.3    0.021 
+YER096W SHC1 SGDID:S000000898, Chr V from 351698-353236, Genome R...  31.2    0.31  
+YKL125W RRN3 SGDID:S000001608, Chr XI from 208247-210130, Genome ...  30.4    0.44  
+YKL149C DBR1 SGDID:S000001632, Chr XI from 168829-167612, Genome ...  30.4    0.50  
+YEL016C NPP2 SGDID:S000000742, Chr V from 126218-124737, Genome R...  28.9    1.5   
+YOR125C CAT5 SGDID:S000005651, Chr XV from 559731-559030, Genome ...  26.9    4.0   
+YPL186C UIP4 SGDID:S000006107, Chr XVI from 195426-194512, Genome...  26.9    4.9   
+
+
+> YFL039C ACT1 SGDID:S000001855, Chr VI from 54377-53260,54696-54687, 
+Genome Release 64-1-1, reverse complement, Verified 
+ORF, "Actin, structural protein involved in cell polarization, 
+endocytosis, and other cytoskeletal functions"
+Length=375
+
+ Score = 783 bits (2021),  Expect = 0.0, Method: Compositional matrix adjust.
+ Identities = 375/375 (100%), Positives = 375/375 (100%), Gaps = 0/375 (0%)
+
+Query  1    MDSEVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQS  60
+            MDSEVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQS
+Sbjct  1    MDSEVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQS  60
+
+Query  61   KRGILTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNREKMT  120
+            KRGILTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNREKMT
+Sbjct  61   KRGILTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNREKMT  120
+
+Query  121  QIMFETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDL  180
+            QIMFETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDL
+Sbjct  121  QIMFETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDL  180
+
+Query  181  AGRDLTDYLMKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSSIEKSY  240
+            AGRDLTDYLMKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSSIEKSY
+Sbjct  181  AGRDLTDYLMKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSSIEKSY  240
+
+Query  241  ELPDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRKELYGNIVMS  300
+            ELPDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRKELYGNIVMS
+Sbjct  241  ELPDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRKELYGNIVMS  300
+
+Query  301  GGTTMFPGIAERMQKEITALAPSSMKVKIIAPPERKYSVWIGGSILASLTTFQQMWISKQ  360
+            GGTTMFPGIAERMQKEITALAPSSMKVKIIAPPERKYSVWIGGSILASLTTFQQMWISKQ
+Sbjct  301  GGTTMFPGIAERMQKEITALAPSSMKVKIIAPPERKYSVWIGGSILASLTTFQQMWISKQ  360
+
+Query  361  EYDESGPSIVHHKCF  375
+            EYDESGPSIVHHKCF
+Sbjct  361  EYDESGPSIVHHKCF  375
+
+
+> YHR129C ARP1 SGDID:S000001171, Chr VIII from 364153-362999, 
+Genome Release 64-1-1, reverse complement, Verified ORF, "Actin-related 
+protein of the dynactin complex; required for spindle 
+orientation and nuclear migration; putative ortholog of 
+mammalian centractin"
+Length=384
+
+ Score = 366 bits (940),  Expect = 3e-126, Method: Compositional matrix adjust.
+ Identities = 172/368 (47%), Positives = 254/368 (69%), Gaps = 3/368 (1%)
+
+Query  8    LVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQSKRGILTL  67
+            +VIDNGSG+ KAGF+G++ P+A+   +VG  ++  +M+   Q D+++G+ AQ  RG+L L
+Sbjct  15   VVIDNGSGIIKAGFSGEERPKALEYCLVGNTKYDKVMLEGLQGDTFIGNNAQKLRGLLKL  74
+
+Query  68   RYPIEHGIVTNWDDMEKIWHHTFYNELRVAP-EEHPVLLTEAPMNPKSNREKMTQIMFET  126
+            RYPI+HG+V +WD ME IW +     L++    EHP+L+TEAPMNP  NRE+M Q++FET
+Sbjct  75   RYPIKHGVVEDWDSMELIWSYVLNEVLQLQNIGEHPLLITEAPMNPLKNREQMAQVLFET  134
+
+Query  127  FNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDLAGRDLT  186
+            F+V A YVS  AVLSLY+SGRTTG V+D G+G    VPIY GF+LP +++R+D+ G D+T
+Sbjct  135  FDVSALYVSNPAVLSLYASGRTTGCVVDCGEGYCSTVPIYDGFALPASMMRMDIGGADIT  194
+
+Query  187  DYL-MKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSS-IEKSYELPD  244
+            + L  ++    G S  +++EREIVR +KEK+CY+A + ++E +   Q +  +  +++LPD
+Sbjct  195  EQLQFQLRKSAGVSLFSSSEREIVRTMKEKVCYLAKNIKKEEEKYLQGTQDLISTFKLPD  254
+
+Query  245  GQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRKELYGNIVMSGGTT  304
+            G+ I +GN+R+RAPE LF P ++GL   G+      SI K D+D+RK L  +I++SGGTT
+Sbjct  255  GRCIEVGNDRYRAPEILFSPQIIGLGYDGLSDMCMQSIWKVDLDLRKPLLSSIILSGGTT  314
+
+Query  305  MFPGIAERMQKEITALAPSSMKVKIIAPPERKYSVWIGGSILASLTTFQQMWISKQEYDE  364
+               G  +RM  ++ AL   + K+KIIAP ERKY+ WIGGSIL  L+TFQ++W  K ++ E
+Sbjct  315  TLKGFGDRMLWDLEALTKGTSKIKIIAPSERKYTTWIGGSILTGLSTFQRLWTKKSDWLE  374
+
+Query  365  SGPSIVHH  372
+                +  +
+Sbjct  375  DSTRVYSN  382
+
+
+> YDL029W ARP2 SGDID:S000002187, Chr IV from 399340-399361,399485-400638, 
+Genome Release 64-1-1, Verified ORF, "Essential 
+component of the Arp2/3 complex, which is a highly conserved 
+actin nucleation center required for the motility and integrity 
+of actin patches; involved in endocytosis and membrane 
+growth and polarity"
+Length=391
+
+ Score = 363 bits (931),  Expect = 8e-125, Method: Compositional matrix adjust.
+ Identities = 174/377 (46%), Positives = 255/377 (68%), Gaps = 16/377 (4%)
+
+Query  8    LVIDNGSGMCKAGFAGDDAPRAVFPSIVGRP---RHQGIMVGMGQKDSYVGDEAQSKRGI  64
+            +V+D G+G  K G AG++ P   FPSIVGRP     +   V    KD  +GDEA   R  
+Sbjct  7    IVLDQGTGFVKIGRAGENFPDYTFPSIVGRPILRAEERASVATPLKDIMIGDEASEVRSY  66
+
+Query  65   LTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEH-PVLLTEAPMNPKSNREKMTQIM  123
+            L + YP+E+GI+ NW DME +W + F+ ++++    +  +LLTE PMNP  NREKM ++M
+Sbjct  67   LQISYPMENGIIKNWTDMELLWDYAFFEQMKLPSTSNGKILLTEPPMNPLKNREKMCEVM  126
+
+Query  124  FETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDLAGR  183
+            FE ++    YV+IQAVL+LY+ G ++G+V+DSGDGVTH+VP+Y    L H   R+D+AGR
+Sbjct  127  FEKYDFGGVYVAIQAVLALYAQGLSSGVVVDSGDGVTHIVPVYESVVLSHLTRRLDVAGR  186
+
+Query  184  DLTDYLMKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSSIEKSYELP  243
+            D+T +L+ +LS RGY+F+ TA+ E VR IKEKLCYV+ D + + + A +++++ +SYELP
+Sbjct  187  DVTRHLIDLLSRRGYAFNRTADFETVRQIKEKLCYVSYDLDLDTKLARETTALVESYELP  246
+
+Query  244  DGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRKELYGNIVMSGGT  303
+            DG+ I +G ERF APE LF P ++ +E  G+ +  +N++   DVD+R  LY  IV+SGG+
+Sbjct  247  DGRTIKVGQERFEAPECLFQPGLVDVEQPGVGELLFNTVQSADVDIRSSLYKAIVLSGGS  306
+
+Query  304  TMFPGIAERMQKEITAL--------APSSM---KVKIIAPPERKYSVWIGGSILASLTTF  352
+            +M+PG+  R++KE+  L         PS +   KV+I  PP RK+ V+IGG++LAS+   
+Sbjct  307  SMYPGLPSRLEKELKQLWFSRVLHNDPSRLDKFKVRIEDPPRRKHMVFIGGAVLASIMAD  366
+
+Query  353  Q-QMWISKQEYDESGPS  368
+            +  MW+SKQE+ ESGPS
+Sbjct  367  KDHMWLSKQEWQESGPS  383
+
+
+> YJR065C ARP3 SGDID:S000003826, Chr X from 559158-557809, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Essential 
+component of the Arp2/3 complex, which is a highly conserved 
+actin nucleation center required for the motility and 
+integrity of actin patches; involved in endocytosis and membrane 
+growth and polarity"
+Length=449
+
+ Score = 243 bits (621),  Expect = 2e-77, Method: Compositional matrix adjust.
+ Identities = 157/444 (35%), Positives = 237/444 (53%), Gaps = 87/444 (20%)
+
+Query  7    ALVIDNGSGMCKAGFAGDDAPRAVFP--------------SIVGRP--------------  38
+            A+V+DNG+G+ K GFAG+D+P  VFP              S VG P              
+Sbjct  8    AVVMDNGTGLTKLGFAGNDSPSWVFPTAIATAAPSNTKKSSGVGAPSAVSNEASYFGNST  67
+
+Query  39   ---RHQGIMVGM------GQK-----DSYVGDEA--QSKRGILTLRYPIEHGIVTNWDDM  82
+                  G   G+      G++     D Y+G+EA   S+    +L YPI HG V NWD M
+Sbjct  68   SATNFNGATGGLLSNNLSGKRGTEDLDFYIGNEALVASQGPSYSLSYPIRHGQVENWDHM  127
+
+Query  83   EKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNREKMTQIMFETFNVPAFYVSIQAVLSL  142
+            E+ W ++ +  LR  PE+H  LLTE P+NP  NRE++ +I FE+FN    Y+++QAVL+L
+Sbjct  128  ERFWENSIFKYLRTEPEDHFFLLTEPPLNPPENREQVAEIFFESFNCAGLYIAVQAVLAL  187
+
+Query  143  YSSGRT--------TGIVLDSGDGVTHVVPIYAGFSLPHAILRIDLAGRDLTDYLMKILS  194
+             +S  +        TG V+DSGDGVTHV+P+  G+ +  AI  I +AGRD+T ++  +L 
+Sbjct  188  AASWTSSKVTDRSLTGTVIDSGDGVTHVIPVAEGYVIGSAIKNIPIAGRDITLFIQSLLR  247
+
+Query  195  ERGYSFST--TAEREIVRDIKEKLCYVALDFEQEMQTAAQSSS-----IEKSYELPDGQV  247
+            ERG + ++  TAE+     IK++ CYV  D  +E     +  S     + ++ E    +V
+Sbjct  248  ERGEADTSLRTAEK-----IKQEYCYVCPDIVKEFNKFDKDPSKFAQFVVENQEKTRRKV  302
+
+Query  248  ITIGNERFRAPEALFHPSVLGLE-----SAGIDQTTYNSIMKCDVDVRKELYGNIVMSGG  302
+            + IG ERF APE  F+P +   +        +DQT    I  C +DVRK LY NIV+SGG
+Sbjct  303  VDIGYERFLAPEIFFNPEIASSDFLTPLPTVVDQT----IQACPIDVRKGLYNNIVLSGG  358
+
+Query  303  TTMFPGIAERMQKEITALA--------------PSSMKVKIIAPPERKYSVWIGGSILAS  348
+            +TMF     R+Q+++ ++                + + V +I+  +++ +VW GGS+LA 
+Sbjct  359  STMFKDFGRRLQRDLKSIVNNRIAQSELLSGTKSTGVDVSVISHRKQRNAVWFGGSLLAQ  418
+
+Query  349  LTTFQQMWISKQEYDESGPSIVHH  372
+               F+    +K++Y+E GP IV +
+Sbjct  419  TAEFKGYCHTKKDYEEYGPEIVRN  442
+
+
+> YLR085C ARP6 SGDID:S000004075, Chr XII from 301989-300673, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Actin-related 
+protein that binds nucleosomes; a component of the 
+SWR1 complex, which exchanges histone variant H2AZ (Htz1p) 
+for chromatin-bound histone H2A"
+Length=438
+
+ Score = 102 bits (254),  Expect = 1e-24, Method: Compositional matrix adjust.
+ Identities = 105/438 (24%), Positives = 174/438 (40%), Gaps = 89/438 (20%)
+
+Query  4    EVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRP-RHQGIMVGMGQKDSYVGDEAQSKR  62
+            E   +VIDNGS   K G           PS   +P R    +       SY+ +  ++ +
+Sbjct  2    ETPPIVIDNGSYEIKFG-----------PSTNKKPFRALNALAKDKFGTSYLSNHIKNIK  50
+
+Query  63   GI--LTLRYPIEHGIVTNWDDMEKIWHHTFYN-------ELRVAPEEHPVLLTEAPMNPK  113
+             I  +T R P E G +T W+    IW +  +N       +L+     H ++ +E+ M   
+Sbjct  51   DISSITFRRPHELGQLTLWELESCIWDYCLFNPSEFDGFDLKEGKGHH-LVASESCMTLP  109
+
+Query  114  SNREKMTQIMFETFNVPAFYVSIQAVLSLYS----------SGRTTGI------------  151
+               +   Q++FE +   + + S  AV   ++          SG+   I            
+Sbjct  110  ELSKHADQVIFEEYEFDSLFKSPVAVFVPFTKSYKGEMRTISGKDEDIDIVRGNSDSTNS  169
+
+Query  152  --------------------VLDSGDGVTHVVPIYAGFSLPHAILRIDLAGRDLTDYLMK  191
+                                V+DSG   T ++P+  G     A+ ++D+ GR LT  L +
+Sbjct  170  TSSESKNAQDSGSDYHDFQLVIDSGFNCTWIIPVLKGIPYYKAVKKLDIGGRFLTGLLKE  229
+
+Query  192  ILSERGYSFSTTAEREIVRDIKEK--------------------LCYVALDFEQEMQTAA  231
+             LS R Y+     E  +V +IKE+                    L YV  DF+       
+Sbjct  230  TLSFRHYNM--MDETILVNNIKEQCLFVSPVSYFDSFKTKDKHALEYVLPDFQTSFLGYV  287
+
+Query  232  QSSSIEKSYELPDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCDVDVRK  291
+            ++   E      D Q+IT+ +E F  PE  FHP +  +   GI +    S+      VR 
+Sbjct  288  RNPRKENVPLPEDAQIITLTDELFTIPETFFHPEISQITKPGIVEAILESLSMLPEIVRP  347
+
+Query  292  ELYGNIVMSGGTTMFPGIAERMQKEITALAPSSMKVKIIAPPERKYSV--WIGGSILASL  349
+             + GNIV +GG    P  A+R+  E+    P+      ++ PE   ++  W   S  A  
+Sbjct  348  LMVGNIVCTGGNFNLPNFAQRLAAELQRQLPTDWTCH-VSVPEGDCALFGWEVMSQFAKT  406
+
+Query  350  TTFQQMWISKQEYDESGP  367
+             ++++  ++++EY E GP
+Sbjct  407  DSYRKARVTREEYYEHGP  424
+
+
+> YNL059C ARP5 SGDID:S000005004, Chr XIV from 514935-512668, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Nuclear 
+actin-related protein involved in chromatin remodeling, 
+component of chromatin-remodeling enzyme complexes"
+Length=755
+
+ Score = 102 bits (255),  Expect = 2e-24, Method: Compositional matrix adjust.
+ Identities = 65/230 (28%), Positives = 117/230 (51%), Gaps = 12/230 (5%)
+
+Query  6    AALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQSKRGIL  65
+            + + ID GS   +AGF     P  +FP+ + + R + +        ++VG++    + + 
+Sbjct  38   SPIAIDFGSSKLRAGFVNHATPTHIFPNALTKFRDRKLNKNF----TFVGNDTLLDQAVR  93
+
+Query  66   TL-RYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEE---HPVLLTEAPMNPKSNREKMTQ  121
+            +  R P +   VTNW+  E+I  +TF++ L V P+    +P+LLTE     +S R    Q
+Sbjct  94   SQSRSPFDGPFVTNWNLTEEILDYTFHH-LGVVPDNGIPNPILLTERLATVQSQRTNWYQ  152
+
+Query  122  IMFETFNVPAFYVSIQAVLSLYS---SGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRI  178
+            I+FET+NVP     I ++ S Y+   SG  TG+V+  G   T+V+P+  G  +     RI
+Sbjct  153  ILFETYNVPGVTFGIDSLFSFYNYNPSGNKTGLVISCGHEDTNVIPVVDGAGILTDAKRI  212
+
+Query  179  DLAGRDLTDYLMKILSERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQ  228
+            +  G    DYL  +++ +   F T         + +  CYV+ +++++++
+Sbjct  213  NWGGHQAVDYLNDLMALKYPYFPTKMSYLQYETMYKDYCYVSRNYDEDIE  262
+
+
+ Score = 64.3 bits (155),  Expect = 9e-12, Method: Compositional matrix adjust.
+ Identities = 39/135 (29%), Positives = 66/135 (49%), Gaps = 17/135 (13%)
+
+Query  253  ERFRAPEALFHPSVLGLESAGIDQTTYNSIMK-----------CDVDVRKELYGNIVMSG  301
+            ER R PE +F P++ G + AGI + +   ++K             +D    +  N++++G
+Sbjct  617  ERIRVPEVIFQPTMGGQDQAGICELSETILLKKFGSQPGKLSQTSID----MVNNVLITG  672
+
+Query  302  GTTMFPGIAERMQKEITALAPSSMKVKIIAPPERKYSVWIGGSILA-SLTTFQQMWISKQ  360
+            G    PG+ ER+ KE T   P+   + +    +     W G + LA +   +++  ISK+
+Sbjct  673  GNAKVPGLKERIVKEFTGFLPTGTNITVNMSSDPSLDAWKGMAALARNEEQYRKTVISKK  732
+
+Query  361  EYDESGPS-IVHHKC  374
+            EY+E GP  I  HK 
+Sbjct  733  EYEEYGPEYIKEHKL  747
+
+
+> YJL081C ARP4 SGDID:S000003617, Chr X from 285271-283802, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Nuclear 
+actin-related protein involved in chromatin remodeling, component 
+of chromatin-remodeling enzyme complexes"
+Length=489
+
+ Score = 99.8 bits (247),  Expect = 1e-23, Method: Compositional matrix adjust.
+ Identities = 76/290 (26%), Positives = 123/290 (42%), Gaps = 36/290 (12%)
+
+Query  4    EVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVGDEAQSKRG  63
+            EV+A+VID GS     G++G D P+++ PS+ G+          G K  +        R 
+Sbjct  13   EVSAVVIDPGSYTTNIGYSGSDFPQSILPSVYGK-----YTADEGNKKIFSEQSIGIPRK  67
+
+Query  64   ILTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEH-PVLLTEAPMNPKSNREKMTQI  122
+               L+  IE+G+V +WD  ++ W     NEL +      P LLTE   N   NR+K  ++
+Sbjct  68   DYELKPIIENGLVIDWDTAQEQWQWALQNELYLNSNSGIPALLTEPVWNSTENRKKSLEV  127
+
+Query  123  MFETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDLAG  182
+            + E     A Y++  +    +++GR   +V+D G     V PI  G +L  +  R  +AG
+Sbjct  128  LLEGMQFEACYLAPTSTCVSFAAGRPNCLVVDIGHDTCSVSPIVDGMTLSKSTRRNFIAG  187
+
+Query  183  RDLTDYLMKILSERG---------------------------YSFSTTAEREIVRDIKEK  215
+            + +   + K L  +                            Y ++    R   ++ KE 
+Sbjct  188  KFINHLIKKALEPKEIIPLFAIKQRKPEFIKKTFDYEVDKSLYDYANN--RGFFQECKET  245
+
+Query  216  LCYVALDFEQEMQTAAQSSSIEKSYELPDGQVITIGNE-RFRAPEALFHP  264
+            LC++      E      SS+ ++S E P  + I   NE R+   E LF P
+Sbjct  246  LCHICPTKTLEETKTELSSTAKRSIESPWNEEIVFDNETRYGFAEELFLP  295
+
+
+ Score = 95.9 bits (237),  Expect = 4e-22, Method: Compositional matrix adjust.
+ Identities = 53/146 (36%), Positives = 81/146 (55%), Gaps = 11/146 (8%)
+
+Query  224  EQEMQTAAQSSSIEKSYELPDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIM  283
+            E+E +  ++S+S       P        NE  + P     P     E  G+    Y+SIM
+Sbjct  342  EKEQEAVSKSTS-------PAANSADTPNETGKRPLEEEKPPKENNELIGLADLVYSSIM  394
+
+Query  284  KCDVDVRKELYGNIVMSGGTTMFPGIAERMQKEITALAPSSMKVKIIAPP---ERKYSVW  340
+              DVD+R  L  N+V++GGT+  PG+++R+  E+  + P S+K +I+      ER+Y  W
+Sbjct  395  SSDVDLRATLAHNVVLTGGTSSIPGLSDRLMTELNKILP-SLKFRILTTGHTIERQYQSW  453
+
+Query  341  IGGSILASLTTFQQMWISKQEYDESG  366
+            +GGSIL SL TF Q+W+ K+EY+E G
+Sbjct  454  LGGSILTSLGTFHQLWVGKKEYEEVG  479
+
+
+> YPR034W ARP7 SGDID:S000006238, Chr XVI from 639525-640958, Genome 
+Release 64-1-1, Verified ORF, "Component of both the SWI/SNF 
+and RSC chromatin remodeling complexes; actin-related 
+protein involved in transcriptional regulation"
+Length=477
+
+ Score = 82.4 bits (202),  Expect = 9e-18, Method: Compositional matrix adjust.
+ Identities = 56/193 (29%), Positives = 94/193 (49%), Gaps = 19/193 (10%)
+
+Query  7    ALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGIMVGMGQKDSYVG-----DEAQSK  61
+             +VI NGS    AGF+  + P+ + PS   +   +G     G+ +   G     D A  K
+Sbjct  7    CVVIHNGSHRTVAGFSNVELPQCIIPSSYIKRTDEG-----GEAEFIFGTYNMIDAAAEK  61
+
+Query  62   RG---ILTLRYPIEHGIVTNWDDMEKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNR--  116
+            R    + TL      G+  NWD +E  W + +  +L+V+PEE P+++T    N K +   
+Sbjct  62   RNGDEVYTLV--DSQGLPYNWDALEMQWRYLYDTQLKVSPEELPLVITMPATNGKPDMAI  119
+
+Query  117  -EKMTQIMFETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAI  175
+             E+  ++ F+  NVP F + I+ +    S G+++  V+D G    +V PI  G  + +A+
+Sbjct  120  LERYYELAFDKLNVPVFQIVIEPLAIALSMGKSSAFVIDIGASGCNVTPIIDGIVVKNAV  179
+
+Query  176  LRIDLAGRDLTDY  188
+            +R    G D  D+
+Sbjct  180  VRSKFGG-DFLDF  191
+
+
+ Score = 36.6 bits (83),  Expect = 0.005, Method: Compositional matrix adjust.
+ Identities = 21/75 (28%), Positives = 42/75 (56%), Gaps = 5/75 (7%)
+
+Query  293  LYGNIVMSGGTTMFPGIAERMQKEITALAPSSMKVKIIAPP---ERKYSVWIGGSILASL  349
+            L  N++++G T++  G+ +R+ KE++   P   K+   A     +RK   W+G   +A+L
+Sbjct  388  LLTNVIITGSTSLIEGMEQRIIKELSIRFP-QYKLTTFANQVMMDRKIQGWLGALTMANL  446
+
+Query  350  TTFQQ-MWISKQEYD  363
+             ++    W SK++Y+
+Sbjct  447  PSWSLGKWYSKEDYE  461
+
+
+> YMR033W ARP9 SGDID:S000004636, Chr XIII from 337788-337817,337904-339277, 
+Genome Release 64-1-1, Verified ORF, "Component 
+of both the SWI/SNF and RSC chromatin remodeling complexes; 
+actin-related protein involved in transcriptional regulation"
+Length=467
+
+ Score = 43.5 bits (101),  Expect = 3e-05, Method: Compositional matrix adjust.
+ Identities = 56/257 (22%), Positives = 102/257 (40%), Gaps = 62/257 (24%)
+
+Query  102  PVLLTEAPMNPKSNREKMTQIMFETFNV------PAFYVSIQAVLSLYSSGRTTGIVLDS  155
+            P+LL       +S+ E +TQ +FE+  +      PA   +  +++SL +       ++D 
+Sbjct  110  PLLLITHHSWSQSDLEIITQYVFESLEINNLIQLPASLAATYSMISLQNC-----CIIDV  164
+
+Query  156  GDGVTHVVPIYAGFSLPHAILRIDLAGRDLTDYLMKIL----SERGYSFSTTAEREIVRD  211
+            G   T ++PI     L H +  I + G+ + D L K+L     ++  S   +   E++ D
+Sbjct  165  GTHHTDIIPIVDYAQLDHLVSSIPMGGQSINDSLKKLLPQWDDDQIESLKKSPIFEVLSD  224
+
+Query  212  IKEKLCYVALDFEQEMQ--------------------------------TAAQSSSIE-K  238
+              +KL   + DF  E +                                   ++S +E  
+Sbjct  225  DAKKLS--SFDFGNENEDEDEGTLNVAEIITSGRDTREVLEERERGQKVKNVKNSDLEFN  282
+
+Query  239  SYELPDGQVITIGNERFRAPEALFH--PSVLGLESAGIDQTTYNSIMKCDVDVRKELYGN  296
+            ++    G  I +G +RF+    L     + +GL    ID          D++  K ++ N
+Sbjct  283  TFWDEKGNEIKVGKQRFQGCNNLIKNISNRVGLTLDNID----------DINKAKAVWEN  332
+
+Query  297  IVMSGGTTMFPGIAERM  313
+            I++ GGTT   G  E +
+Sbjct  333  IIIVGGTTSISGFKEAL  349
+
+
+> YOR141C ARP8 SGDID:S000005667, Chr XV from 592587-589942, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Nuclear 
+actin-related protein involved in chromatin remodeling, 
+component of chromatin-remodeling enzyme complexes; has mRNA 
+binding activity"
+Length=881
+
+ Score = 37.0 bits (84),  Expect = 0.004, Method: Compositional matrix adjust.
+ Identities = 15/49 (31%), Positives = 28/49 (57%), Gaps = 4/49 (8%)
+
+Query  330  IAPPERKYS----VWIGGSILASLTTFQQMWISKQEYDESGPSIVHHKC  374
+            I PP R  +    +W G S+LA +   ++++I+  ++D  G  I+ +KC
+Sbjct  829  IIPPPRDMNPALIIWKGASVLAQIKLVEELFITNSDWDVHGSRILQYKC  877
+
+
+ Score = 34.7 bits (78),  Expect = 0.023, Method: Compositional matrix adjust.
+ Identities = 28/129 (22%), Positives = 57/129 (44%), Gaps = 5/129 (4%)
+
+Query  63   GILTLRYPIEHGIVTNWDDMEKIWHHTFYNE-LRVAP---EEHPVLLTEAPMNPKSNREK  118
+            G   ++ P    +     D+ K+  H   +E L V P    ++ V+L    +  KS+ E 
+Sbjct  406  GSFNVKSPYYKSLAELISDVTKLLEHALNSETLNVKPTKFNQYKVVLVIPDIFKKSHVET  465
+
+Query  119  MTQIMFETFNVPAFYVSIQAVLSLYSSG-RTTGIVLDSGDGVTHVVPIYAGFSLPHAILR  177
+              +++       A  +  +++ + Y +G  T+  V++ G   T +  +  G  L H+ + 
+Sbjct  466  FIRVLLTELQFQAVAIIQESLATCYGAGISTSTCVVNIGAAETRIACVDEGTVLEHSAIT  525
+
+Query  178  IDLAGRDLT  186
+            +D  G D+T
+Sbjct  526  LDYGGDDIT  534
+
+
+ Score = 29.6 bits (65),  Expect = 0.95, Method: Compositional matrix adjust.
+ Identities = 15/39 (38%), Positives = 20/39 (51%), Gaps = 1/39 (3%)
+
+Query  1    MDSEVAALVIDNGSGMCKAGFAGDDAPRAVFPSIVGRPR  39
+            ++   A +VI  GS   K GF  DD P  V P+ V  P+
+Sbjct  262  LNDPTATIVIHPGSNSIKIGFPKDDHP-VVVPNCVAVPK  299
+
+
+> YDR106W ARP10 SGDID:S000002513, Chr IV from 667004-667858, Genome 
+Release 64-1-1, Verified ORF, "Component of the dynactin 
+complex, localized to the pointed end of the Arp1p filament; 
+may regulate membrane association of the complex"
+Length=284
+
+ Score = 34.3 bits (77),  Expect = 0.021, Method: Compositional matrix adjust.
+ Identities = 22/89 (25%), Positives = 39/89 (44%), Gaps = 0/89 (0%)
+
+Query  78   NWDDMEKIWHHTFYNELRVAPEEHPVLLTEAPMNPKSNREKMTQIMFETFNVPAFYVSIQ  137
+            N ++++KI+ H F     +   E  VL+ E        +  +  I+F+ F+        +
+Sbjct  40   NREELKKIFEHYFQICNILGNREVQVLILEDIFISVVEKRIICSILFKEFDCAHVSFVPR  99
+
+Query  138  AVLSLYSSGRTTGIVLDSGDGVTHVVPIY  166
+            A++   S      IV+D G   T  VPI+
+Sbjct  100  AIVHCLSCNTRNAIVIDIGTNYTTCVPIF  128
+
+
+> YER096W SHC1 SGDID:S000000898, Chr V from 351698-353236, Genome 
+Release 64-1-1, Verified ORF, "Sporulation-specific activator 
+of Chs3p (chitin synthase III), required for the synthesis 
+of the chitosan layer of ascospores; has similarity to 
+Skt5p, which activates Chs3p during vegetative growth; transcriptionally 
+induced at alkaline pH"
+Length=512
+
+ Score = 31.2 bits (69),  Expect = 0.31, Method: Compositional matrix adjust.
+ Identities = 34/116 (29%), Positives = 52/116 (45%), Gaps = 8/116 (7%)
+
+Query  125  ETFNVPAFYVSIQAVLSLYSSGRTTGIVLDSGDGVTHVVPIYAGFSLPHAILRIDLAGRD  184
+            E+ NV  F++  +   SL    +T  +    G+ V     IY+ F     ILR+ L    
+Sbjct  221  ESHNVAKFHLGKKNKKSLLPRWKTIEMY---GEVVKKTQDIYSNFQYAQYILRVGLDTEK  277
+
+Query  185  LTDYLMKILSERGYSFSTTAERE-IVRDIK---EKLCYVALDFEQEMQTAAQSSSI  236
+            L + L+K L +   SFS  + +E +V D K   +KL  V     Q +   A SS +
+Sbjct  278  LHE-LVKELEDESNSFSVDSLKEYLVNDAKVILKKLSAVGYPDAQYLLGDAYSSGV  332
+
+
+> YKL125W RRN3 SGDID:S000001608, Chr XI from 208247-210130, Genome 
+Release 64-1-1, Verified ORF, "Protein required for transcription 
+of rDNA by RNA polymerase I; transcription factor 
+independent of DNA template; involved in recruitment of RNA 
+polymerase I to rDNA"
+Length=627
+
+ Score = 30.4 bits (67),  Expect = 0.44, Method: Compositional matrix adjust.
+ Identities = 21/85 (25%), Positives = 40/85 (47%), Gaps = 11/85 (13%)
+
+Query  135  SIQAVLSLYSSGRTTGIVLDSGDGV-----------THVVPIYAGFSLPHAILRIDLAGR  183
+            SI  ++S +   + T   L+SG+GV           THV+P Y   S+ + +  +     
+Sbjct  334  SILTLVSTHVEEQVTPESLESGEGVGVFNTLTTLFKTHVLPTYYTRSIQYIMFHVSQQQL  393
+
+Query  184  DLTDYLMKILSERGYSFSTTAEREI  208
+            +L D  +  L +  ++ +  AE++I
+Sbjct  394  ELMDSFLVTLIDISFAVNEAAEKKI  418
+
+
+> YKL149C DBR1 SGDID:S000001632, Chr XI from 168829-167612, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "RNA 
+lariat debranching enzyme, involved in intron turnover; required 
+for efficient Ty1 transposition"
+Length=405
+
+ Score = 30.4 bits (67),  Expect = 0.50, Method: Compositional matrix adjust.
+ Identities = 19/60 (32%), Positives = 30/60 (50%), Gaps = 8/60 (13%)
+
+Query  85   IWHHTFYNELRVAPEEHPVLLTEAPMNP-------KSNREKMTQIMFETFNVPAFYVSIQ  137
+             W   F N L V  +++  LL+  P N        +SNRE+   I +E + +PA+ + IQ
+Sbjct  331  FWDPEFINNL-VICQKNKNLLSNKPFNSVNWIELSQSNREEGRDIDWENYAIPAYTLDIQ  389
+
+
+> YEL016C NPP2 SGDID:S000000742, Chr V from 126218-124737, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Nucleotide 
+pyrophosphatase/phosphodiesterase family member; mediates 
+extracellular nucleotide phosphate hydrolysis along with 
+Npp1p and Pho5p; activity and expression enhanced during conditions 
+of phosphate starvation"
+Length=493
+
+ Score = 28.9 bits (63),  Expect = 1.5, Method: Compositional matrix adjust.
+ Identities = 12/21 (57%), Positives = 17/21 (81%), Gaps = 2/21 (10%)
+
+Query  64   ILTLRYPIEHGIVTN--WDDM  82
+            ++T +YPIEHGIV+N  WD+ 
+Sbjct  134  MVTGKYPIEHGIVSNIFWDNF  154
+
+
+> YOR125C CAT5 SGDID:S000005651, Chr XV from 559731-559030, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Protein 
+required for ubiquinone (Coenzyme Q) biosynthesis; localizes 
+to the matrix face of the mitochondrial inner membrane 
+in a large complex with ubiquinone biosynthetic enzymes; required 
+for gluconeogenic gene activation"
+Length=233
+
+ Score = 26.9 bits (58),  Expect = 4.0, Method: Compositional matrix adjust.
+ Identities = 15/44 (34%), Positives = 24/44 (55%), Gaps = 3/44 (7%)
+
+Query  64   ILTLRYPIEHGIVTN-WDDMEKIWHHTFYNELRVAPEEHPVLLT  106
+            +L  RYP    ++ + WD  ++I HH  +N L++     P LLT
+Sbjct  76   VLAHRYPHLKPVLKHIWD--QEIHHHNTFNNLQLKRRVRPSLLT  117
+
+
+> YPL186C UIP4 SGDID:S000006107, Chr XVI from 195426-194512, Genome 
+Release 64-1-1, reverse complement, Verified ORF, "Protein 
+that interacts with Ulp1p, a Ubl (ubiquitin-like protein)-specific 
+protease for Smt3p protein conjugates; detected 
+in a phosphorylated state in the mitochondrial outer membrane; 
+also detected in ER and nuclear envelope"
+Length=304
+
+ Score = 26.9 bits (58),  Expect = 4.9, Method: Compositional matrix adjust.
+ Identities = 32/164 (20%), Positives = 55/164 (34%), Gaps = 15/164 (9%)
+
+Query  138  AVLSLYSSGRTTGIVLDSGDGVTHVVP------IYAGFSLPHAILRIDLA--------GR  183
+            A L+    G + G   D GD   H          Y G   P   L+ ++          +
+Sbjct  88   ATLNNEEDGGSAGEEKDEGDKTAHNTNENGSELYYEGPETPTPSLKGNVTFPSPKTAISQ  147
+
+Query  184  DLTDYLMKIL-SERGYSFSTTAEREIVRDIKEKLCYVALDFEQEMQTAAQSSSIEKSYEL  242
+            D + +  +    ER Y  +   E  + RD KE+   ++ +F QE     Q   ++   E 
+Sbjct  148  DGSAFAKETTRKERKYEHAPLNEVPVERDPKEENKELSPNFSQEQTENKQDKGLDNLSEG  207
+
+Query  243  PDGQVITIGNERFRAPEALFHPSVLGLESAGIDQTTYNSIMKCD  286
+             D     +  +            + G ++   D +    I K D
+Sbjct  208  NDNDNTRVNEDTDVTDTQESEHEINGSDTENTDMSEQEEIQKID  251
+
+
+
+Lambda      K        H        a         alpha
+   0.318    0.135    0.396    0.792     4.96 
+
+Gapped
+Lambda      K        H        a         alpha    sigma
+   0.267   0.0410    0.140     1.90     42.6     43.6 
+
+Effective search space used: 851264094
+
+
+  Database: blastdb-fine
+    Posted date:  May 21, 2026  12:12 AM
+  Number of letters in database: 7,964
+  Number of sequences in database:  17
+
+
+
+Matrix: BLOSUM62
+Gap Penalties: Existence: 11, Extension: 1
+Neighboring words threshold: 11
+Window for multiple hits: 40
+
+Search summary: 17 fine alignments, 22 HSPs
+	Command being timed: "hs-cablastp-search hs_sprot_db query.fasta -v"
+	User time (seconds): 1.15
+	System time (seconds): 0.28
+	Percent of CPU this job got: 322%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.44
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 41376
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2
+	Minor (reclaiming a frame) page faults: 297829
+	Voluntary context switches: 287
+	Involuntary context switches: 361
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 272
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
