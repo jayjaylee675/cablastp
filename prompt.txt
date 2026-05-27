@@ -1,0 +1,26 @@
+Please optimize the HS-CaBLASTP algorithm implementation to solve severe performance and compression ratio issues observed in diverse datasets like SwissProt. Based on the benchmark and logs, the current implementation suffers from a 38x slower compression speed, a 2.3GB memory spike anomaly, and a failure to cluster cross-family sequences (99% of sequences become root nodes). 
+
+Please review the following files: `hs_cablastp/types.py`, `hs_cablastp/compress.py`, and `hs_cablastp/alignment.py`, and implement the following 4 architectural updates:
+
+1. Fix the Memory Anomaly (Cache Eviction)
+In `compress.py`, the `_seq_cache` used by `_Compressor.reconstruct` currently grows unboundedly. During a Real-World Run with a 4.8MB input, Peak RSS spiked to 2.3GB. 
+- Action: Refactor the reconstruction cache to use an LRU cache (e.g., `functools.lru_cache` or a bounded dictionary mechanism with a `maxsize` of 1000) to prevent Out-Of-Memory (OOM) errors during the compression phase.
+
+2. Implement Hierarchical Seeding (Index Child Nodes)
+Currently, in `types.py` and `compress.py`, `SeedTable` only indexes k-mers from root sequences (`is_root=True`). This forces every new sequence to evaluate against root nodes and pay the high cost of `_descend_to_best` for shallow trees.
+- Action: Modify `SeedTable` to index k-mers from *child* nodes as well. Update the `table` signature to store `(node_id, offset)`. When a child is created and attached, extract its k-mers and add them to the `SeedTable`. This allows new sequences to graft directly onto deeper nodes.
+
+3. Multi-stage Thresholding (Dynamic Window Gating)
+The hardcoded `MIN_IDENTITY = 0.7` and `MIN_LENGTH = 40` in `compress.py` are too strict for diverse protein datasets, causing almost all sequences to fail the attachment criteria and become standalone roots.
+- Action: Implement dynamic thresholding based on the target node's depth. 
+  - Change the initial NW identity check to be lenient (e.g., `MIN_IDENTITY = 0.5` for root node attachments).
+  - As the tree depth increases, tighten the identity requirement (e.g., `target.depth == 1` -> 0.6, `target.depth >= 2` -> 0.7).
+  - Reduce `MIN_LENGTH` from 40 to 30 to capture shorter homologous domains.
+
+4. Optimize Needleman-Wunsch & Sparse Seeding
+The pure Python banded DP table in `alignment.py` (`needleman_wunsch`) causes a severe computational bottleneck.
+- Action: 
+  - If possible within the project's dependency constraints, refactor the inner loop of `needleman_wunsch` using `numpy` matrix operations or add a `@njit` decorator via Numba. 
+  - In `compress_sequence` (`compress.py`), implement a "sparse seed lookup". Instead of sliding the k-mer window by 1 position (`pos += 1`), slide it by a stride of 2 or 3 when no match is found, drastically reducing the number of `best_match` evaluations.
+
+Please outline your plan for these 4 changes before modifying the files.
