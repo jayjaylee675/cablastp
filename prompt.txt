@@ -1,26 +1,30 @@
-Please optimize the HS-CaBLASTP algorithm implementation to solve severe performance and compression ratio issues observed in diverse datasets like SwissProt. Based on the benchmark and logs, the current implementation suffers from a 38x slower compression speed, a 2.3GB memory spike anomaly, and a failure to cluster cross-family sequences (99% of sequences become root nodes). 
+Please optimize the HS-CaBLASTP algorithm implementation to solve severe performance and compression ratio issues. Based on previous benchmark logs, the current code suffers from a 38x slower compression speed, a 2.3GB memory spike anomaly, and a failure to cluster cross-family sequences (99% of sequences become root nodes).
 
-Please review the following files: `hs_cablastp/types.py`, `hs_cablastp/compress.py`, and `hs_cablastp/alignment.py`, and implement the following 4 architectural updates:
+CRITICAL INSTRUCTION (CIRCUIT BREAKER): 
+Before making any architectural changes, you MUST first create a lightweight evaluation script named `eval_hs_cablastp.py`. This script should run the compression phase on a small sample of data (e.g., the first 500 sequences of `data/orf_trans_all.fasta`) and assert the following metrics:
+1. Memory Check: Peak RSS must be under 300 MB.
+2. Compression Ratio Check: The number of Child Nodes must be at least 15% of the total nodes (proving that sequences are actually clustering, not just becoming roots).
+3. Speed Check: The compression of 500 sequences must finish in under 30 seconds.
 
-1. Fix the Memory Anomaly (Cache Eviction)
-In `compress.py`, the `_seq_cache` used by `_Compressor.reconstruct` currently grows unboundedly. During a Real-World Run with a 4.8MB input, Peak RSS spiked to 2.3GB. 
-- Action: Refactor the reconstruction cache to use an LRU cache (e.g., `functools.lru_cache` or a bounded dictionary mechanism with a `maxsize` of 1000) to prevent Out-Of-Memory (OOM) errors during the compression phase.
+Execution Rule:
+After implementing EACH of the 4 steps below, you must run `eval_hs_cablastp.py`. If any of the assertions fail, you MUST HALT execution immediately, revert the file to its previous state, and ask me for further instructions. Do NOT proceed to the next step if the current step breaks the evaluation metrics.
 
-2. Implement Hierarchical Seeding (Index Child Nodes)
-Currently, in `types.py` and `compress.py`, `SeedTable` only indexes k-mers from root sequences (`is_root=True`). This forces every new sequence to evaluate against root nodes and pay the high cost of `_descend_to_best` for shallow trees.
-- Action: Modify `SeedTable` to index k-mers from *child* nodes as well. Update the `table` signature to store `(node_id, offset)`. When a child is created and attached, extract its k-mers and add them to the `SeedTable`. This allows new sequences to graft directly onto deeper nodes.
+Please implement the following 4 architectural updates sequentially:
 
-3. Multi-stage Thresholding (Dynamic Window Gating)
-The hardcoded `MIN_IDENTITY = 0.7` and `MIN_LENGTH = 40` in `compress.py` are too strict for diverse protein datasets, causing almost all sequences to fail the attachment criteria and become standalone roots.
-- Action: Implement dynamic thresholding based on the target node's depth. 
-  - Change the initial NW identity check to be lenient (e.g., `MIN_IDENTITY = 0.5` for root node attachments).
-  - As the tree depth increases, tighten the identity requirement (e.g., `target.depth == 1` -> 0.6, `target.depth >= 2` -> 0.7).
-  - Reduce `MIN_LENGTH` from 40 to 30 to capture shorter homologous domains.
+Step 1. Fix the Memory Anomaly (Cache Eviction)
+In `compress.py`, the `_seq_cache` used by `_Compressor.reconstruct` grows unboundedly, causing OOM. 
+- Action: Refactor the reconstruction cache to use an LRU cache (`functools.lru_cache` or a bounded dict with `maxsize=1000`). Run `eval_hs_cablastp.py` to ensure memory is stable.
 
-4. Optimize Needleman-Wunsch & Sparse Seeding
-The pure Python banded DP table in `alignment.py` (`needleman_wunsch`) causes a severe computational bottleneck.
-- Action: 
-  - If possible within the project's dependency constraints, refactor the inner loop of `needleman_wunsch` using `numpy` matrix operations or add a `@njit` decorator via Numba. 
-  - In `compress_sequence` (`compress.py`), implement a "sparse seed lookup". Instead of sliding the k-mer window by 1 position (`pos += 1`), slide it by a stride of 2 or 3 when no match is found, drastically reducing the number of `best_match` evaluations.
+Step 2. Implement Hierarchical Seeding (Index Child Nodes)
+Currently, `SeedTable` only indexes k-mers from root sequences (`is_root=True`), forcing expensive `_descend_to_best` calls.
+- Action: Modify `SeedTable` in `types.py` and `compress.py` to index k-mers from *child* nodes as well. Update the table to store `(node_id, offset)`. Add child k-mers upon creation. Run evaluation.
 
-Please outline your plan for these 4 changes before modifying the files.
+Step 3. Multi-stage Thresholding (Dynamic Window Gating)
+Hardcoded `MIN_IDENTITY = 0.7` and `MIN_LENGTH = 40` reject too many valid matches.
+- Action: Implement dynamic thresholding based on target node depth. E.g., `target.depth == 0` -> MIN_IDENTITY 0.5. `target.depth >= 1` -> 0.6. Reduce `MIN_LENGTH` to 30. Run evaluation to check if the Child Node ratio increases.
+
+Step 4. Optimize Needleman-Wunsch & Sparse Seeding
+The pure Python `needleman_wunsch` in `alignment.py` is the main bottleneck.
+- Action: Refactor the inner loop of `needleman_wunsch` using a `@njit` decorator via Numba (if available) or optimize the array allocations. Also, implement a "sparse seed lookup" in `compress_sequence` (slide the k-mer window by a stride of 2 or 3 when no match is found). Run final evaluation.
+
+Please output your plan and write `eval_hs_cablastp.py` first.
