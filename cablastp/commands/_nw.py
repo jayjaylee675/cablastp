@@ -1,4 +1,9 @@
-"""Needleman-Wunsch sequence alignment (port of nw.go)."""
+"""Needleman-Wunsch sequence alignment (port of nw.go).
+
+When parasail is importable, nw_align routes through the SIMD kernel in
+cablastp.commands._nw_ps. Otherwise it falls back to the pure-Python
+implementation below — same scoring, same alignment output shape.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,11 @@ from typing import Tuple
 
 from cablastp.blosum import ALPHABET62, MATRIX62
 from cablastp.commands._memory import DYNAMIC_TABLE_SIZE, Memory
+
+try:
+    from cablastp.commands._nw_ps import nw_align_ps as _nw_ps
+except Exception:  # parasail missing -> silent fallback
+    _nw_ps = None
 
 # Translate ASCII residue characters to BLOSUM62 indices.
 _RES_TRANS = [0] * 256
@@ -15,6 +25,8 @@ for _idx, _ch in enumerate(ALPHABET62):
 
 def nw_align(rseq: bytes, oseq: bytes, mem: Memory) -> Tuple[bytes, bytes]:
     """Needleman-Wunsch global alignment, constrained for long sequences."""
+    if _nw_ps is not None:
+        return _nw_ps(rseq, oseq, mem)
     gap = len(MATRIX62) - 1
     r = len(rseq) + 1
     c = len(oseq) + 1

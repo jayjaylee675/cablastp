@@ -131,7 +131,17 @@ def compress(
             if len(org_match) < db.MinMatchLen:
                 continue
 
-            alignment = nw_align(cor_match, org_match, mem)
+            # Gap-free fast path: extend_match advances cor/org pointers in
+            # lockstep through align_ungapped, so when no gapped step was taken
+            # both halves are equal length and gap-free. NW on equal-length
+            # inputs maximises score, not identity — and any gapped alignment
+            # for equal-length inputs has identity <= the 1:1 pairing's (gaps
+            # only dilute the denominator). So the 1:1 alignment is the
+            # right alignment for the identity gate; skip the DP.
+            if len(cor_match) == len(org_match):
+                alignment = (cor_match, org_match)
+            else:
+                alignment = nw_align(cor_match, org_match, mem)
             id_pct = seq_identity(alignment[0], alignment[1])
             if id_pct < db.MatchSeqIdThreshold:
                 continue
