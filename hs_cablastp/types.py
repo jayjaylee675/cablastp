@@ -29,19 +29,29 @@ class TreeNode:
 
 
 class SeedTable:
-    """Maps k-mer string -> list of (root_node_id, offset_in_root)."""
+    """Maps k-mer string -> list of (node_id, offset_in_node).
+
+    Indexes k-mers from both root and child nodes. The offset is relative to
+    the start of that node's own (reconstructed) sequence, so a hit on a child
+    points directly at the child rather than forcing a descent from the root.
+    """
 
     def __init__(self, k: int):
         self.k = k
         self.table: Dict[str, List[Tuple[int, int]]] = defaultdict(list)
 
-    def add_root_sequence(self, node_id: int, sequence: str) -> None:
+    def add_sequence(self, node_id: int, sequence: str) -> None:
+        """Index every clean k-mer of `sequence` under `node_id`."""
         k = self.k
         for i in range(len(sequence) - k + 1):
             kmer = sequence[i:i + k]
             if "*" in kmer or "-" in kmer:
                 continue
             self.table[kmer].append((node_id, i))
+
+    # Back-compat alias; roots and children index the same way.
+    add_root_sequence = add_sequence
+    add_node_sequence = add_sequence
 
     def lookup(self, kmer: str) -> List[Tuple[int, int]]:
         return self.table.get(kmer, [])

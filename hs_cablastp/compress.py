@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -18,13 +19,21 @@ from hs_cablastp.types import CompressedDB, EditOp, SeedTable, TreeNode
 # Defaults from the spec.
 K_MER_SIZE = 4
 MIN_IDENTITY = 0.7
-MIN_LENGTH = 40
+MIN_LENGTH = 30           # Step 3: relaxed from 40 to admit shorter homologies.
 MAX_DEPTH = 5
+
+# Step 3: depth-dependent identity gating. Matching against a root (depth 0) is
+# allowed to be looser because roots are the broadest cluster representatives;
+# attaching deeper requires tighter agreement to keep diff scripts small.
+MIN_IDENTITY_ROOT = 0.5   # target.depth == 0
+MIN_IDENTITY_CHILD = 0.6  # target.depth >= 1
 
 # Implementation knobs (not in the spec).
 MAX_SEED_HITS = 32        # cap candidates examined per seed
 GAPPED_BAND = 10          # NW band width
 EXTEND_DROP = 12          # X-drop for ungapped extension
+MISS_STRIDE = 2           # sparse seeding: advance by this many on a failed seed
+RECON_CACHE_MAX = 1000    # bounded LRU size for reconstructed-sequence cache
 
 
 @dataclass
@@ -51,18 +60,31 @@ class _Compressor:
         min_identity: float = MIN_IDENTITY,
         min_length: int = MIN_LENGTH,
         max_depth: int = MAX_DEPTH,
+        min_identity_root: float = MIN_IDENTITY_ROOT,
+        min_identity_child: float = MIN_IDENTITY_CHILD,
     ):
         self.k = k
         self.min_identity = min_identity
         self.min_length = min_length
         self.max_depth = max_depth
+        self.min_identity_root = min_identity_root
+        self.min_identity_child = min_identity_child
         self.db = CompressedDB()
         self.seeds = SeedTable(k)
-        self._seq_cache: Dict[int, str] = {}  # node_id -> reconstructed string
+        # Bounded LRU: node_id -> reconstructed string. The original unbounded
+        # dict grew with every node ever reconstructed; under a deep/wide forest
+        # that is an unbounded heap leak. An OrderedDict capped at RECON_CACHE_MAX
+        # keeps memory flat while still caching hot ancestors during a descent.
+        self._seq_cache: "OrderedDict[int, str]" = OrderedDict()
+
+    def _min_identity_for_depth(self, depth: int) -> float:
+        """Step 3: looser gate for root targets, tighter for deeper nodes."""
+        return self.min_identity_root if depth == 0 else self.min_identity_child
 
     def reconstruct(self, node_id: int) -> str:
         cached = self._seq_cache.get(node_id)
         if cached is not None:
+            self._seq_cache.move_to_end(node_id)  # mark most-recently-used
             return cached
         node = self.db.forest[node_id]
         if node.is_root:
@@ -72,6 +94,9 @@ class _Compressor:
             parent_segment = parent_seq[node.parent_start:node.parent_end]
             seq = apply_edit_script(parent_segment, node.diff_script)
         self._seq_cache[node_id] = seq
+        self._seq_cache.move_to_end(node_id)
+        if len(self._seq_cache) > RECON_CACHE_MAX:
+            self._seq_cache.popitem(last=False)  # evict least-recently-used
         return seq
 
     def _invalidate_cache(self, node_id: int) -> None:
@@ -121,6 +146,11 @@ class _Compressor:
                         parent_end=match.target_end,
                     )
                     target_node.children.append(child.node_id)
+                    # Step 2: index the child's own k-mers so later sequences
+                    # can seed-match it directly (deeper clustering) instead of
+                    # only ever attaching to roots.
+                    child_seq = seq[match.q_start:match.q_end]
+                    self.seeds.add_node_sequence(child.node_id, child_seq)
                 else:
                     # Depth cap reached: emit this region as a new root instead.
                     self._make_root(
@@ -129,7 +159,13 @@ class _Compressor:
                 pos = match.q_end
                 pending_root_start = pos
             else:
-                pos += 1
+                # Sparse seeding: when the window at `pos` yields no usable
+                # match, neighbouring windows (which share k-1 residues) almost
+                # always fail too, so re-running extension/NW at every offset is
+                # wasteful. Stride forward to skip the redundant work. Data is
+                # still preserved: the skipped residues stay inside the pending
+                # root region and are flushed by _make_root below.
+                pos += MISS_STRIDE if hits else 1
 
         # Flush trailing region. MUST preserve every leftover residue.
         if N > pending_root_start:
@@ -152,26 +188,45 @@ class _Compressor:
     ) -> Optional[_Match]:
         best: Optional[_Match] = None
         for root_id, root_off in hits[:MAX_SEED_HITS]:
-            root = self.db.forest[root_id]
-            root_seq = root.sequence or ""
+            # Targets may now be child nodes (Step 2), whose sequence is not
+            # stored literally — reconstruct it (cached LRU) rather than reading
+            # node.sequence, which is None for children.
+            root_seq = self.reconstruct(root_id)
             if not root_seq:
                 continue
+            min_identity = self._min_identity_for_depth(
+                self.db.forest[root_id].depth
+            )
             sa, ea, sb, eb = ungapped_extend(
                 seq, pos, root_seq, root_off, self.k, max_drop=EXTEND_DROP,
             )
             q_sub = seq[sa:ea]
             t_sub = root_seq[sb:eb]
-            if len(q_sub) < self.min_length:
-                # Try gapped extension via NW around the seed window.
+            if len(q_sub) >= self.min_length:
+                # ungapped_extend advances both pointers in lockstep, so q_sub
+                # and t_sub are equal-length and gap-free: the alignment is the
+                # 1:1 pairing itself. No Needleman-Wunsch needed (this was the
+                # dominant cost in the profile). Identity is a direct compare.
+                parent_aln, child_aln = t_sub, q_sub
+            else:
+                # Too short ungapped: fall back to constrained gapped alignment.
                 q_sub, t_sub, sa, ea, sb, eb = self._gapped_extend(
                     seq, root_seq, sa, ea, sb, eb
                 )
                 if len(q_sub) < self.min_length:
                     continue
-
-            parent_aln, child_aln = needleman_wunsch(t_sub, q_sub, band=GAPPED_BAND)
+                # NB: an older revision gated this call with a cheap
+                # best_diagonal_identity prefilter to skip NW on candidates
+                # unlikely to reach the threshold. Profiling after parasail
+                # was wired in (~0.05 ms/NW vs ~1 ms/prefilter scan) showed
+                # the prefilter cost more than the NW it avoided, *and* its
+                # band=4 gap-free assumption silently rejected real homologs
+                # with wider indels. With parasail on, run NW unconditionally.
+                parent_aln, child_aln = needleman_wunsch(
+                    t_sub, q_sub, band=GAPPED_BAND
+                )
             identity = alignment_identity(parent_aln, child_aln)
-            if identity < self.min_identity:
+            if identity < min_identity:
                 continue
 
             cand = _Match(
@@ -225,11 +280,21 @@ class _Compressor:
                     continue
                 # Align the query subsequence against child_seq.
                 q_sub = match_q_sub(best)
-                parent_aln, child_aln = needleman_wunsch(
-                    child_seq, q_sub, band=GAPPED_BAND
-                )
+                if len(child_seq) == len(q_sub):
+                    # Equal length => a gap-free 1:1 pairing is itself a valid
+                    # alignment, so the banded NW (the profile's dominant cost,
+                    # reached almost entirely through this descent loop) cannot
+                    # change the residue correspondence. Skip it. This mirrors
+                    # the same gap-free fast path in _best_match and fires on
+                    # the common case here: indel-free point-mutation variants.
+                    parent_aln, child_aln = child_seq, q_sub
+                else:
+                    parent_aln, child_aln = needleman_wunsch(
+                        child_seq, q_sub, band=GAPPED_BAND
+                    )
                 ident = alignment_identity(parent_aln, child_aln)
-                if ident >= self.min_identity and ident > best.identity:
+                child_min_identity = self._min_identity_for_depth(child.depth)
+                if ident >= child_min_identity and ident > best.identity:
                     best = _Match(
                         target_id=child_id,
                         target_seq=child_seq,
