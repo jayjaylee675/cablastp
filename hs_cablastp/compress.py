@@ -16,8 +16,10 @@ from hs_cablastp.alignment import (
 from hs_cablastp.types import CompressedDB, EditOp, SeedTable, TreeNode
 
 
-# Defaults from the spec.
-K_MER_SIZE = 4
+# Defaults from the spec (k bumped to 5 with Murphy-10 seeding: 10^5 = 100k
+# unique buckets gives ~10x sparser per-bucket candidate counts than k=4,
+# which keeps the MAX_SEED_HITS=32 cap from binding on popular reduced k-mers).
+K_MER_SIZE = 5
 MIN_IDENTITY = 0.7
 MIN_LENGTH = 30           # Step 3: relaxed from 40 to admit shorter homologies.
 MAX_DEPTH = 5
@@ -107,6 +109,12 @@ class _Compressor:
     # --- Phase 1 core ---
 
     def compress_sequence(self, fasta_id: str, sequence: str) -> None:
+        # Trim fasta_id to its first whitespace token (the accession/id) so
+        # the stored ref_original_seq doesn't carry the full FASTA description.
+        # On Swiss-Prot data the description is the bulk of each header — and
+        # every fragment of an input would otherwise duplicate it.
+        if fasta_id:
+            fasta_id = fasta_id.split(None, 1)[0]
         seq = sequence
         N = len(seq)
         if N == 0:

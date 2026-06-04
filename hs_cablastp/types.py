@@ -28,12 +28,52 @@ class TreeNode:
     parent_end: int = 0                    # End offset within the parent's sequence (children only)
 
 
+# Murphy-10 reduced amino-acid alphabet (Murphy et al. 2000, "Simplified amino
+# acid alphabets for protein fold recognition and implications for folding").
+# Groups residues by physicochemical similarity into 10 classes; lookups hash
+# similar-but-non-identical k-mers to the same bucket, so e.g. an `L` -> `I`
+# substitution still triggers a seed hit. The downstream ungapped_extend and
+# identity check operate on the *original* residues, so reduced-alphabet
+# seeding adds sensitivity without admitting false matches.
+_REDUCE_MAP = {
+    "L": "1", "V": "1", "I": "1", "M": "1",   # aliphatic hydrophobic
+    "C": "2",
+    "A": "3",
+    "G": "4",
+    "S": "5", "T": "5",                       # polar / small
+    "P": "6",
+    "F": "7", "Y": "7", "W": "7",             # aromatic
+    "E": "8", "D": "8", "N": "8", "Q": "8",   # acidic + amide
+    "B": "8", "Z": "8",                       # ambiguous: fold in with their groups
+    "K": "9", "R": "9",                       # basic
+    "H": "0",                                 # basic / aromatic
+}
+
+
+def _reduce_kmer(kmer: str) -> Optional[str]:
+    """Return the Murphy-10 reduced form of `kmer`, or None if it contains an
+    unmappable residue (gap, stop, or ambiguity char not in _REDUCE_MAP)."""
+    out = []
+    for c in kmer:
+        m = _REDUCE_MAP.get(c)
+        if m is None:
+            return None
+        out.append(m)
+    return "".join(out)
+
+
 class SeedTable:
-    """Maps k-mer string -> list of (node_id, offset_in_node).
+    """Maps Murphy-10 reduced k-mer string -> list of (node_id, offset).
 
     Indexes k-mers from both root and child nodes. The offset is relative to
     the start of that node's own (reconstructed) sequence, so a hit on a child
     points directly at the child rather than forcing a descent from the root.
+
+    Keys are Murphy-10 reduced (10 chars vs the full 20-letter alphabet), so
+    chemically similar k-mers collide and all become candidates from a single
+    lookup. The downstream extension/identity check operates on the original
+    residues, so reduced-alphabet seeding adds sensitivity without admitting
+    false matches.
     """
 
     def __init__(self, k: int):
@@ -45,16 +85,20 @@ class SeedTable:
         k = self.k
         for i in range(len(sequence) - k + 1):
             kmer = sequence[i:i + k]
-            if "*" in kmer or "-" in kmer:
+            reduced = _reduce_kmer(kmer)
+            if reduced is None:
                 continue
-            self.table[kmer].append((node_id, i))
+            self.table[reduced].append((node_id, i))
 
     # Back-compat alias; roots and children index the same way.
     add_root_sequence = add_sequence
     add_node_sequence = add_sequence
 
     def lookup(self, kmer: str) -> List[Tuple[int, int]]:
-        return self.table.get(kmer, [])
+        reduced = _reduce_kmer(kmer)
+        if reduced is None:
+            return []
+        return self.table.get(reduced, [])
 
 
 class CompressedDB:
