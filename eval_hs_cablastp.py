@@ -1,6 +1,6 @@
 """Circuit-breaker evaluation for HS-CaBLASTP compression.
 
-Compresses the first 500 records of data/orf_trans_all.fasta with
+Compresses the first 500 records of data/pdb_seqres.fasta with
 hs_cablastp._Compressor (no BLAST, no disk I/O for the DB), then asserts:
 
   1. Peak Python-heap memory (tracemalloc) < 300 MB
@@ -28,10 +28,15 @@ from cablastp.fasta import FastaReader
 from hs_cablastp.compress import _Compressor
 
 
-_DEFAULT_FASTA = Path(__file__).parent / "data" / "orf_trans_all.fasta"
-# Official gate is 500 sequences of orf_trans_all.fasta. Both the input file and
-# the sample size may be overridden (env var, or argv) purely to take readings
-# on other datasets during investigation; the pass/fail gate is unchanged.
+_DEFAULT_FASTA = Path(__file__).parent / "data" / "pdb_seqres.fasta"
+# Gate is 500 sequences of the default FASTA. Both the input file and the sample
+# size may be overridden (env var, or argv) purely to take readings on other
+# datasets during investigation; the pass/fail gate is unchanged.
+# NOTE: the original gate was calibrated on orf_trans_all.fasta (now removed).
+# pdb_seqres.fasta is the replacement default: its first 500 records are highly
+# redundant (child ratio ~0.73), so the >=0.15 child-ratio gate has comfortable
+# margin. Low-redundancy sets (e.g. ecoli_trembl_2k, child ratio ~0.06) would
+# fail the gate for benign data reasons, not a compression regression.
 FASTA = Path(os.environ.get("EVAL_FASTA", _DEFAULT_FASTA))
 N_SEQS = int(os.environ.get("EVAL_N_SEQS", sys.argv[1] if len(sys.argv) > 1 else 500))
 

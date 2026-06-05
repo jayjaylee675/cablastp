@@ -16,9 +16,9 @@ Steps:
 
 Usage:
     python scripts/roc_benchmark.py \
-        --fasta data/medium.fasta \
-        --cab-db bench/cab_db \
-        --hs-db  bench/hs_db \
+        --fasta data/ecoli_trembl_2k.fasta \
+        --cab-db bench/etrembl2k_cab \
+        --hs-db  bench/etrembl2k_hs \
         --n-queries 50 \
         --out bench \
         --summary-csv bench/summary.csv \
