@@ -67,6 +67,10 @@ def main(argv=None) -> int:
     params = {
         "k": args.k, "min_identity": args.min_identity,
         "min_length": args.min_length, "max_depth": args.max_depth,
+        # Original (uncompressed) database size; used by search to set blastp's
+        # -dbsize so fine-search e-values match a search of the full DB.
+        "orig_db_seqs": comp.input_seqs,
+        "orig_db_residues": comp.input_residues,
     }
     save_db(comp.db, db_dir, params, makeblastdb_path=args.makeblastdb)
     print(f"Database written to {db_dir}")

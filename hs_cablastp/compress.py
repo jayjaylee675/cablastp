@@ -359,6 +359,7 @@ def compress_fasta(
         k=k, min_identity=min_identity, min_length=min_length, max_depth=max_depth,
     )
     total = 0
+    total_residues = 0
     for path in input_paths:
         with open(path, "rb") as fh:
             reader = FastaReader(fh)
@@ -366,8 +367,13 @@ def compress_fasta(
                 seq = rec.residues.decode("ascii").upper()
                 comp.compress_sequence(rec.name, seq)
                 total += 1
+                total_residues += len(seq)
                 if progress and total % 100 == 0:
                     progress(total)
     if progress:
         progress(total, final=True)
+    # Record the uncompressed input size so search can set blastp's -dbsize to
+    # the original database's effective length (see hs_cablastp.search).
+    comp.input_seqs = total
+    comp.input_residues = total_residues
     return comp

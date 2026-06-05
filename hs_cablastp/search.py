@@ -43,8 +43,16 @@ class _CandidateHit:
 
 def _run_blastp(
     blastp: str, query: Path, db_prefix: Path, evalue: float,
+    dbsize: Optional[int] = None,
 ) -> List[List[str]]:
-    """Run blastp in tabular (outfmt 6) mode and return parsed rows."""
+    """Run blastp in tabular (outfmt 6) mode and return parsed rows.
+
+    When ``dbsize`` is given it is passed through as blastp's ``-dbsize`` so the
+    reported e-values are computed against that effective database length rather
+    than the actual (reconstructed-candidate) DB. The fine search uses this to
+    pin e-values to the original uncompressed database size, making them match a
+    search of the full DB and independent of how many queries are batched.
+    """
     cmd = [
         blastp,
         "-query", str(query),
@@ -53,6 +61,8 @@ def _run_blastp(
         "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "
                    "qstart qend sstart send evalue bitscore",
     ]
+    if dbsize:
+        cmd += ["-dbsize", str(dbsize)]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"blastp failed (exit {proc.returncode}):\n{proc.stderr}")
@@ -169,7 +179,7 @@ def search(
     verbose: bool = False,
 ) -> Dict[str, object]:
     """Run a full HS-CaBLASTP search; return a dict of results and stats."""
-    db, _params = load_db(db_dir)
+    db, params = load_db(db_dir)
 
     # --- Phase 2 Step 1: coarse search ---
     coarse_rows = _run_blastp(
@@ -246,7 +256,12 @@ def search(
             )
 
         # --- Phase 3 Step 2: fine search ---
-        fine_rows = _run_blastp(blastp, query_path, fine_db_prefix, fine_evalue)
+        # Pin e-values to the original DB size so they match a full-DB search and
+        # don't drift with the reconstructed-candidate count / query batching.
+        fine_rows = _run_blastp(
+            blastp, query_path, fine_db_prefix, fine_evalue,
+            dbsize=params.get("orig_db_residues"),
+        )
         fine_hits: List[SearchHit] = []
         for row in fine_rows:
             sseqid = row[1]
