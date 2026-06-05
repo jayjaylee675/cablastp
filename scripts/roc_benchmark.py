@@ -120,8 +120,32 @@ def run_blastp_tabular(
     return [ln.split("\t") for ln in proc.stdout.splitlines() if ln.strip()]
 
 
+def _extract_accession(seqid: str) -> str:
+    """Reduce any seqid form we encounter to a bare protein accession.
+
+    Handles:
+      - UniProt-style `tr|ACC|NAME` / `sp|ACC|NAME` -> `ACC`
+      - hs-cablastp refs like `tr|ACC|NAME:start-end` -> `ACC`
+      - Plain accessions left untouched.
+
+    Applied to *both* sides of the comparison (vanilla blastp ground truth
+    and hs-cablastp / cablastp pipeline outputs) so a header-format quirk
+    on one side can't desync the (query, subject) keys.
+    """
+    if not seqid:
+        return ""
+    # Drop hs-cablastp's `:start-end` coord suffix and any trailing whitespace.
+    head = seqid.split(":", 1)[0].split()[0]
+    # UniProt: db|acc|name -> acc
+    if head.startswith(("tr|", "sp|")):
+        parts = head.split("|")
+        if len(parts) >= 2 and parts[1]:
+            return parts[1]
+    return head
+
+
 def parse_tabular_rows(rows: Iterable[List[str]]) -> Dict[Pair, float]:
-    """Return {(q, s): best_bitscore} from tabular rows."""
+    """Return {(q_accession, s_accession): best_bitscore} from tabular rows."""
     best: Dict[Pair, float] = {}
     for r in rows:
         if len(r) < 12:
@@ -130,7 +154,7 @@ def parse_tabular_rows(rows: Iterable[List[str]]) -> Dict[Pair, float]:
             score = float(r[11])
         except ValueError:
             continue
-        key = (r[0], r[1])
+        key = (_extract_accession(r[0]), _extract_accession(r[1]))
         if key not in best or score > best[key]:
             best[key] = score
     return best
@@ -163,12 +187,10 @@ def run_hs_cablastp_pipeline(
     result = hs_search(query_fasta, db_dir, fine_evalue=fine_evalue)
     best: Dict[Pair, float] = {}
     for h in result["fine_hits"]:
-        # fasta_ref looks like "<orig_id>:<start>-<end>" -- keep only orig_id.
-        # Strip everything from the first colon (yeast/UniProt ids don't contain ':').
-        ref = h.fasta_ref.split(":", 1)[0].split()[0] if h.fasta_ref else ""
-        if not ref:
+        acc = _extract_accession(h.fasta_ref)
+        if not acc:
             continue
-        key = (h.qseqid, ref)
+        key = (_extract_accession(h.qseqid), acc)
         if key not in best or h.bitscore > best[key]:
             best[key] = h.bitscore
     return best
@@ -298,7 +320,12 @@ def main() -> int:
           f"({hs_search_seconds:.1f}s)")
 
     # Constrain universe to (sampled queries) x (all subjects in fasta).
-    universe: Set[Pair] = {(q, s) for q in query_ids for s in subject_set}
+    # Keys here must match the accession form used by gt_scores / cab_scores /
+    # hs_scores, otherwise set differences silently produce empty intersections.
+    universe: Set[Pair] = {
+        (_extract_accession(q), _extract_accession(s))
+        for q in query_ids for s in subject_set
+    }
 
     # 5) Missed-hit report + ROC.
     cab_missed = sorted(gt_positives - set(cab_scores.keys()))

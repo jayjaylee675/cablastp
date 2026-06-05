@@ -36,6 +36,13 @@ GAPPED_BAND = 10          # NW band width
 EXTEND_DROP = 12          # X-drop for ungapped extension
 MISS_STRIDE = 2           # sparse seeding: advance by this many on a failed seed
 RECON_CACHE_MAX = 1000    # bounded LRU size for reconstructed-sequence cache
+# Boundary overlap: each root carries OVERLAP_RESIDUES extra residues on each
+# side of its natural [start, end] range (clamped to the input bounds). HSPs
+# that straddle the natural split now have a chance of landing fully inside
+# one of the extended roots — fixing the "fragment-boundary HSP loss" we
+# observed on ecoli_trembl_2k. Trade-off: each split point pays ~2*OVERLAP
+# extra residues in the coarse FASTA. Small in practice (~3-8% growth).
+OVERLAP_RESIDUES = 15
 
 
 @dataclass
@@ -180,13 +187,20 @@ class _Compressor:
             self._make_root(fasta_id, seq, pending_root_start, N)
 
     def _make_root(self, fasta_id: str, seq: str, start: int, end: int) -> TreeNode:
-        sub = seq[start:end]
+        # Extend the natural [start, end] range by OVERLAP_RESIDUES on each
+        # side so HSPs that span this root's boundary still land inside it.
+        # Clamped to the input sequence bounds. The ref_original_seq reflects
+        # the *actual* stored range, so reconstruction and provenance tracking
+        # continue to work without changes.
+        s = max(0, start - OVERLAP_RESIDUES)
+        e = min(len(seq), end + OVERLAP_RESIDUES)
+        sub = seq[s:e]
         node = self.db.new_node(
             is_root=True,
             sequence=sub,
             parent_id=None,
             depth=0,
-            ref_original_seq=f"{fasta_id}:{start}-{end}",
+            ref_original_seq=f"{fasta_id}:{s}-{e}",
         )
         self.seeds.add_root_sequence(node.node_id, sub)
         return node

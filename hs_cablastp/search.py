@@ -19,7 +19,7 @@ from hs_cablastp.types import CompressedDB, EditOp, TreeNode
 # Spec hyperparameters.
 COARSE_EVALUE = 1e-3
 FINE_EVALUE = 1e-10
-PRUNE_THRESHOLD = 0.5  # Heuristic score required to keep a child node.
+PRUNE_THRESHOLD = 0.3  # Heuristic score required to keep a child node.
 
 
 @dataclass
