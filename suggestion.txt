@@ -1,0 +1,189 @@
+================================================================================
+ HS-CaBLASTP 현황 분석 및 완성 계획 (claude plan suggestion)
+ 작성일: 2026-06-10
+================================================================================
+
+목표: (a) hs-cablastp 알고리즘 완성, (b) 속도/압축 면 우위 + 정확도 유지를
+실험으로 입증, (c) figure 작성. 본 문서는 현재 상태 분석과 오늘 마감을 위한
+실행 계획을 담는다.
+
+--------------------------------------------------------------------------------
+0. 프로젝트 위치와 구성
+--------------------------------------------------------------------------------
+- 실제 프로젝트: C:\Users\user\cablastp
+  (작업 디렉토리로 잡힌 C:\Program Files\Git 는 Git 설치 폴더일 뿐)
+- 두 파이프라인 공존:
+  * cablastp/      원본 Go(BurntSushi/cablastp)를 Python 포팅한 기준선(baseline)
+  * hs_cablastp/   신규 계층적 알고리즘
+                   (compress.py, search.py, types.py, alignment.py,
+                    forest_codec.py, io.py)
+- 스펙 문서 3종:
+  debug.md (최초 요구사항 스케치) -> hs_cablastp.md (스펙)
+  -> HS_CABLASTP_ALGORITHM.md (코드에서 역추출한 권위 문서)
+  단, HS_CABLASTP_ALGORITHM.md 는 K_MER_SIZE=4 등 옛 값으로 남아 현재
+  코드(compress.py 의 K=5 등)와 어긋남 -> 갱신 필요.
+
+--------------------------------------------------------------------------------
+1. 사용 데이터셋
+--------------------------------------------------------------------------------
+- data/ecoli_trembl_dense_2k.fasta (1.1MB) : subsample_dense.py 로 GN= 유전자
+  패밀리 상위 + 균주 간 거의 동일 서열만 추출. 매우 중복적(child ratio ~0.64).
+  => 핵심 데모셋(여기서만 hs 가 이김).
+- data/ecoli_trembl_2k.fasta (838KB) : TrEMBL 균일 랜덤 2k (child ratio ~0.06).
+- data/ecoli_2k.fasta (899KB) : E.coli 2k.
+- data/swissprot_sample.fasta (514KB) : SwissProt 샘플.
+- data/pdb_seqres.fasta (377MB) : PDB 전체(샘플링용).
+- medium.fasta (효모 955 ORF, 685KB) : log.md 초기 비교셋.
+모두 git 미추적(메모리: git add -u 사용). eval_hs_cablastp.py 게이트는
+dense 셋 첫 500개로 보정.
+
+--------------------------------------------------------------------------------
+2. 압축 알고리즘 (Phase 1, hs_cablastp/compress.py)
+--------------------------------------------------------------------------------
+개념: 원본 cablastp 가 "서열 전체"를 평면 coarse DB 대비 edit-script 로 중복
+제거하는 것을, hs 는 "부분서열(subsequence) 단위의 트리 숲(forest)"으로 일반화.
+한 노드 = "이 부분서열이 기존 노드(루트/자식)의 부분서열과 닮았다".
+
+흐름(compress_sequence):
+1) FASTA 레코드마다 길이 k=5 슬라이딩 윈도우.
+2) k-mer 를 Murphy-10 축약 알파벳(types.py:_REDUCE_MAP)으로 해싱 -> SeedTable
+   조회. L<->I 같은 보존적 치환도 같은 버킷에 충돌시켜 민감도 향상(실제 동일성
+   검사는 원본 잔기로).
+3) 히트가 있으면 _best_match:
+   (a) BLOSUM62 X-drop ungapped 확장 (EXTEND_DROP=12)
+   (b) MIN_LENGTH=30 미만이면 대칭 확장 후 (c) banded Needleman-Wunsch
+       (GAPPED_BAND=10, parasail 사용)
+   - 깊이별 동일성 게이트: 루트 MIN_IDENTITY_ROOT=0.5, 자식 0.6
+   (d) _descend_to_best: 매칭 루트의 자식 서브트리로 내려가며 더 잘 맞는 후손
+       탐색(시드 없이 트리 하강으로 깊은 클러스터링)
+   (e) 점수 = identity x length, 최대 선택
+4) 매칭 시: 앞쪽 미매칭 구간 -> 루트로 flush. 매칭 구간은
+   target.depth < MAX_DEPTH(=5) 이면 자식(diff_script 만 저장, 서열 미저장),
+   아니면 새 루트. 자식 k-mer 도 시드에 등록(Step2 개선).
+5) 미매칭이면 stride 전진(MISS_STRIDE=2).
+6) 무손실 불변식: 입력 모든 잔기는 자식 diff_script 안 또는 루트 sequence 안에
+   반드시 보존(끝단 dangling flush).
+
+경계 오버랩(OVERLAP_RESIDUES=15): 각 루트가 자연 경계 양쪽 15잔기씩 더 저장
+-> 분할 경계를 가로지르는 HSP 가 한 루트에 온전히 들어가도록.
+
+디스크 포맷: forest_codec.py(magic HSFOREST v2)가 pickle 대비 ~90% 작은
+바이너리. ref 문자열 인터닝 + EditOp 1~6바이트 패킹 + varint.
+coarse.fasta + blastdb-coarse.* 는 루트만.
+
+--------------------------------------------------------------------------------
+3. 탐색 알고리즘 (Phase 2/3, hs_cablastp/search.py)
+--------------------------------------------------------------------------------
+1) Coarse: 쿼리 vs 루트 BLAST DB, COARSE_EVALUE=1e-3. 각 행 -> _RootHit.
+2) Pruning(_prune_tree, DFS): 루트 히트 커버 구간을 자식으로 전파.
+   _heuristic_keep 이 자식 diff_script 중 윈도우 내 disruption(DELETE=2,
+   SUB/INS=1)을 세어 score = 1 - disruptions/window_len, PRUNE_THRESHOLD=0.3
+   미만이면 가지치기. (쿼리 서열을 직접 보지 않고 부모 대비 자식 발산도만 봄.)
+3) Reconstruct + Fine: 살아남은 후보를 부모 포인터 따라 무손실 복원 ->
+   임시 FASTA -> makeblastdb -> FINE_EVALUE=1e-10 blastp. -dbsize 를 원본 DB
+   잔기수로 고정해 e-value 가 배치 크기와 무관하게 풀-DB 검색과 일치.
+
+--------------------------------------------------------------------------------
+4. 평가 방법 (scripts/roc_benchmark.py, 현재 작업트리엔 삭제됨; git 복원 가능)
+--------------------------------------------------------------------------------
+1) 입력 FASTA 에서 N=50 쿼리 샘플(seed 고정).
+2) Ground truth = vanilla blastp(쿼리 vs 원본 FASTA), evalue <= 1e-3 쌍 전부.
+3) cablastp / hs-cablastp 검색 -> (qseqid, 원본 대상 id) 쌍 + bitscore 정규화.
+4) universe = 50 x 2000 쌍에 대해 ROC/AUC, missed/extra -> bench/roc.png,
+   summary.csv, roc_points.csv.
+보조 게이트 eval_hs_cablastp.py: dense 첫 500개로 메모리<300MB, child ratio>=0.15,
+wall<30s 검증.
+진단 도구: trace_missed_pairs.py, analyze_3_misses.py (누락 쌍이 coarse/prune/
+fine 어디서 떨어지는지 단계별 추적).
+
+현재 최신 결과(bench/summary.csv):
+  dataset      pipeline   compress  db_size   search   recall    precision
+  dense_2k     cablastp   -         1918KB    7.61s    0.9996    1.0
+  dense_2k     hs         44.2s     1649KB    6.93s    0.9979    1.0   (6 miss)
+  etrembl_2k   cablastp   -         2467KB    4.0s     1.0       1.0
+  etrembl_2k   hs         102s      2439KB    2.79s    0.9926    0.9926(1 miss)
+  medium(효모) cablastp   12.3s     2157KB    6.4s     0.989     -
+  medium(효모) hs         434s      3221KB    4.37s    1.0       -
+=> hs 는 오직 dense(고중복) 셋에서만 압축/속도 양쪽 우위.
+   일반/발산 셋에선 압축이 더 크거나 비슷하고 컴파일 매우 느림.
+
+--------------------------------------------------------------------------------
+5. 초기 모델 대비 수정된 점 (git 히스토리 기준)
+--------------------------------------------------------------------------------
+초기 커밋 f782933(최초 hs 모듈)에서 순차적으로 고쳐짐:
+1) 속도: 초기 NW 가 전체 ~95%(효모 955개 434초). 수정:
+   - d0aec39 parasail NW + ungapped 가 MIN_LENGTH 채우면 NW 건너뛰는
+     gap-free fast path + 자식 시딩
+   - 2e3c75d 축약 알파벳 시딩
+   - e0157f1 cablastp 도 가속
+   결과 dense 2k 압축 44초.
+2) 메모리: 무한 증가하던 reconstruct 캐시를 OrderedDict LRU
+   (RECON_CACHE_MAX=1000)로 제한.
+3) 압축률: 초기 child ratio ~0(효모 965루트/50자식). 수정: k=4->5(축약),
+   MIN_LENGTH 40->30, 깊이별 동일성 완화(root 0.5/child 0.6), 자식 k-mer 시딩.
+   dense 에서 child ratio ~0.64.
+4) DB 크기: 2e3c75d + forest_codec 로 forest blob ~90% 축소.
+5) 무손실/경계: 606d116 OVERLAP_RESIDUES=15 로 분할 경계 HSP 손실 완화.
+6) e-value 일관성: 3ded657 fine 검색 -dbsize 원본 크기 고정.
+7) 누락 진단 인프라: 1a99b54 트레이싱 도구 추가.
+
+--------------------------------------------------------------------------------
+6. 아직 남아 있는 문제점
+--------------------------------------------------------------------------------
+1) [핵심] 단편화(fragmentation) recall 손실: dense 셋 6 누락은 e-value 문제가
+   아니라 한 단백질이 여러 루트/노드로 쪼개져 참 HSP 가 한 조각에 온전히 안
+   담기는 구조 문제. -dbsize 로 해결 안 됨, OVERLAP_RESIDUES 로 부분 완화.
+   모든 누락이 단일 쿼리 A6MJP2 에 몰림(경계 분할 피해자).
+2) 일반 데이터에서 압축 이점 없음: etrembl_2k 2439 vs 2467KB(동률), 효모선
+   오히려 더 큼(3221 vs 2157). hs 우위가 dense 셋 한정.
+3) 압축 속도 여전히 느림: dense 44초는 개선됐으나 발산 셋(효모 434초)은 수십 배.
+4) pruning 휴리스틱이 쿼리를 안 봄: _heuristic_keep 이 부모-자식 발산만 보고
+   쿼리 정렬 무시 -> 가지치기 과/소가 데이터 의존(threshold 0.5->0.3 이미 완화).
+5) 문서 표류: HS_CABLASTP_ALGORITHM.md 하이퍼파라미터가 현재 코드와 불일치.
+6) 벤치 스크립트 미추적/삭제: scripts/roc_benchmark.py 가 작업트리에서 삭제됨
+   (git 엔 있음). figure 재현 시 복원 필요. summary.csv 에 cablastp 압축시간 공란.
+7) decompress CLI 부재(무손실 증명은 됨, 기능만 없음) - 데모엔 비필수.
+
+--------------------------------------------------------------------------------
+7. 오늘 마감을 위한 실행 계획
+--------------------------------------------------------------------------------
+핵심 전략: "dense 셋을 주력 결과로 확정하고, 그 위에서 recall gap 만 메운다."
+hs 는 본질적으로 '중복 많은 DB 압축'이 강점이므로, 그 강점이 드러나는 셋으로
+스토리를 만드는 게 오늘 안에 가장 확실히 결과가 나온다.
+
+[P0] 결과 셋 확정 & figure 재생산 (지금 바로, ~30분)
+- scripts/roc_benchmark.py 를 git 에서 복원, dense_2k + etrembl_2k 두 셋에
+  재실행 -> roc.png, summary.csv 신선화.
+- 메모리 노트대로 실행 전 bench/raw_blast_db.* 삭제(셋 바뀔 때 stale 재사용 버그).
+- "압축률/검색속도 우위 + recall ~= 1" 표/그림 1차본 확보.
+
+[P1] 단편화 recall gap 닫기 (정확도 개선 효과 최대, ~1-2시간)
+- 6 누락이 전부 경계 분할 원인 -> 둘 중 하나:
+  (간단) OVERLAP_RESIDUES 15 -> 30~40 키워 재압축/재평가. 누락 사라지면 채택
+         (DB ~3-8% 증가).
+  (정공) 압축 시 flush 루트의 최소 길이 보장(짧은 조각을 인접 루트와 병합)으로
+         분할 자체 감소.
+- trace_missed_pairs.py 로 6쌍이 coarse/prune/fine 중 어디서 죽는지 먼저 확인
+  후 파라미터 한 번에 결정.
+
+[P2] figure 패키징 (~30분)
+- ROC 2-pane(전체+저FPR 줌)에 더해, 압축률 막대(KB)/압축시간/검색시간/recall
+  4지표 비교 막대그래프 1장 추가.
+- 핵심 메시지: "dense 셋에서 hs 가 DB 14% 감소, 검색 9% 감소, recall 유지."
+
+[P3] 문서/재현성 정리 (~30분)
+- HS_CABLASTP_ALGORITHM.md 하이퍼파라미터를 현재 코드값(k=5, MIN_LENGTH=30,
+  깊이별 identity, OVERLAP)으로 동기화.
+- log.md 에 6/3~6/10 세션 결과 추가(현재 5/20 에서 멈춤).
+- roc_benchmark.py 재커밋(삭제 취소).
+
+[선택]
+- P4: 가지치기 휴리스틱에 쿼리-정렬 정보 반영 또는 threshold 스윕으로
+      recall/속도 trade-off 곡선 1장 추가.
+- P5: 압축 속도 추가 최적화는 dense 44초면 데모엔 충분하므로 후순위.
+
+솔직한 평가: hs-cablastp 가 cablastp 를 전면적으로 능가하긴 어렵다(일반/발산
+데이터에선 이점 없음). 그러나 "고중복 단백질 DB(균주 패밀리 등)에서 더 작은
+DB / 더 빠른 검색을 거의 동일한 recall 로 달성"이라는 한정 주장은 dense 셋
+데이터로 오늘 안에 방어 가능하다. 이것이 가장 현실적인 마감 시나리오다.
+================================================================================
