@@ -189,19 +189,58 @@ def run_cablastp_pipeline(
     return parse_tabular_rows(rows)
 
 
+# Inline runner used to time hs-cablastp as a COLD subprocess, symmetric to the
+# cablastp-search console script. It pays the same Python-interpreter startup +
+# package import cost, then prints full untruncated tabular (qseqid, fasta_ref,
+# bitscore) for every fine hit. The shipped hs-cablastp-search CLI is unusable
+# for this: it caps output at 50 hits, truncates fasta_ref to 22 chars, and never
+# prints qseqid — so we drive search() directly through this small emitter.
+_HS_SUBPROCESS_RUNNER = (
+    "import sys, pathlib;"
+    "from hs_cablastp.search import search;"
+    "r = search(pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]),"
+    " fine_evalue=float(sys.argv[3]));"
+    "[print(h.qseqid + chr(9) + h.fasta_ref + chr(9) + repr(h.bitscore))"
+    " for h in r['fine_hits']]"
+)
+
+
 def run_hs_cablastp_pipeline(
-    query_fasta: Path, db_dir: Path, fine_evalue: float,
+    query_fasta: Path, db_dir: Path, fine_evalue: float, in_process: bool = False,
 ) -> Dict[Pair, float]:
-    """Call hs_cablastp.search.search() directly; map node hits to original ids."""
-    result = hs_search(query_fasta, db_dir, fine_evalue=fine_evalue)
+    """Map hs-cablastp fine hits to {(q_acc, s_acc): best_bitscore}.
+
+    Timing fairness (#5): by default we run hs-cablastp as a *cold subprocess*
+    (a fresh Python process that imports the package and calls search()), exactly
+    like cablastp-search is run, so both pipelines pay an identical interpreter-
+    startup + import cost. An earlier revision called search() in-process, which
+    silently handed hs-cablastp a ~0.24s head start over cablastp's subprocess.
+    Pass in_process=True to restore the old (unfair, faster) in-process path.
+    """
     best: Dict[Pair, float] = {}
-    for h in result["fine_hits"]:
-        acc = _extract_accession(h.fasta_ref)
+    if in_process:
+        result = hs_search(query_fasta, db_dir, fine_evalue=fine_evalue)
+        pairs = (((h.qseqid, h.fasta_ref), h.bitscore) for h in result["fine_hits"])
+    else:
+        proc = subprocess.run(
+            [sys.executable, "-c", _HS_SUBPROCESS_RUNNER,
+             str(query_fasta), str(db_dir), str(fine_evalue)],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"hs-cablastp subprocess failed (exit {proc.returncode}):\n"
+                f"{proc.stderr}"
+            )
+        rows = [ln.split("\t") for ln in proc.stdout.splitlines() if ln.strip()]
+        pairs = (((r[0], r[1]), float(r[2])) for r in rows if len(r) == 3)
+    for (qseqid, fasta_ref), bitscore in pairs:
+        acc = _extract_accession(fasta_ref)
         if not acc:
             continue
-        key = (_extract_accession(h.qseqid), acc)
-        if key not in best or h.bitscore > best[key]:
-            best[key] = h.bitscore
+        key = (_extract_accession(qseqid), acc)
+        if key not in best or bitscore > best[key]:
+            best[key] = bitscore
     return best
 
 
