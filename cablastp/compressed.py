@@ -142,11 +142,16 @@ class CompressedDB:
                 "A compressed database cannot be read while it is also "
                 "being modified."
             )
-        cache = self._seq_cache or {}
+        # Never `self._seq_cache or {}`: an empty instance dict is falsy, so that
+        # rebinds `cache` to a throwaway local and the populated entries are lost
+        # (the `is None` write-back never fires once _seq_cache is a dict). Seed
+        # the real dict on first use, then operate on it directly so the cache
+        # actually persists across calls.
+        if self._seq_cache is None:
+            self._seq_cache = {}
+        cache = self._seq_cache
         if org_seq_id not in cache:
             cache[org_seq_id] = self.read_seq(coarsedb, org_seq_id)
-        if self._seq_cache is None:
-            self._seq_cache = cache
         return cache[org_seq_id]
 
     SeqGet = seq_get

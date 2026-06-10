@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import csv
-import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -26,12 +25,8 @@ PRUNE_THRESHOLD = 0.3  # Heuristic score required to keep a child node.
 @dataclass
 class _RootHit:
     root_id: int
-    q_start: int
-    q_end: int
     s_start: int  # On the root's sequence.
     s_end: int
-    evalue: float
-    bitscore: float
 
 
 @dataclass
@@ -62,7 +57,7 @@ def _run_blastp(
         "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "
                    "qstart qend sstart send evalue bitscore",
     ]
-    if dbsize:
+    if dbsize is not None:
         cmd += ["-dbsize", str(dbsize)]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -241,11 +236,11 @@ def search(
             continue
         root_id = int(sseqid.split("_", 1)[1])
         matched_root_ids.add(root_id)
+        # Only the subject (root) range drives pruning; the query range and
+        # alignment scores in cols 6/7/10/11 are unused here.
         root_hits.append(_RootHit(
             root_id=root_id,
-            q_start=int(row[6]) - 1, q_end=int(row[7]),
             s_start=int(row[8]) - 1, s_end=int(row[9]),
-            evalue=float(row[10]), bitscore=float(row[11]),
         ))
 
     # --- Phase 2 Step 2: tree pruning ---
@@ -303,8 +298,8 @@ def search(
         if fine_fasta.stat().st_size == 0:
             return {
                 "coarse_hits": len(coarse_rows),
-                "candidates": 0,
-                "unique_candidates": 0,
+                "candidates": len(candidates),
+                "unique_candidates": len(seq_to_rep),
                 "fine_hits": [],
                 "matched_roots": len(matched_root_ids),
                 "load_seconds": _t_loaded - _t0,
@@ -325,9 +320,20 @@ def search(
         # --- Phase 3 Step 2: fine search ---
         # Pin e-values to the original DB size so they match a full-DB search and
         # don't drift with the reconstructed-candidate count / query batching.
+        orig_db_residues = params.get("orig_db_residues")
+        if orig_db_residues is None:
+            # Older DBs predate this key; without it e-values are computed against
+            # the tiny candidate DB and are not comparable to a full-DB search.
+            # Warn rather than silently change their meaning.
+            print(
+                "warning: this DB has no 'orig_db_residues'; fine e-values are "
+                "computed against the candidate DB, not the original DB size "
+                "(rebuild the DB to pin them).",
+                file=sys.stderr,
+            )
         fine_rows = _run_blastp(
             blastp, query_path, fine_db_prefix, fine_evalue,
-            dbsize=params.get("orig_db_residues"),
+            dbsize=orig_db_residues,
         )
         fine_hits: List[SearchHit] = []
         for row in fine_rows:

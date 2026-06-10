@@ -108,6 +108,13 @@ def needleman_wunsch(a: str, b: str, band: int = 0) -> Tuple[str, str]:
     if m == 0:
         return a, "-" * n
 
+    # A band narrower than the length difference cannot reach cell (n, m): it
+    # stays at NEG and the traceback then walks an arbitrary all-gap path,
+    # yielding a wrong identity. Widen it to at least |n-m| so the bottom-right
+    # corner is always reachable. (band == 0 means "unbanded" — leave it.)
+    if band:
+        band = max(band, abs(n - m))
+
     gap_pen = MATRIX62[_GAP_IDX][_GAP_IDX]
     NEG = -10 ** 9
 
@@ -185,48 +192,6 @@ def alignment_identity(aln_a: str, aln_b: str) -> float:
         if ca == cb:
             matches += 1
     return matches / total if total else 0.0
-
-
-def alignment_length_ungapped(aln_a: str) -> int:
-    """Length of the aligned region counted on side A (excluding gaps on A)."""
-    return sum(1 for c in aln_a if c != "-")
-
-
-def best_diagonal_identity(a: str, b: str, band: int) -> float:
-    """Best gap-free identity of `a` vs `b` over all diagonal offsets in [-band, band].
-
-    A cheap pre-filter for the banded Needleman-Wunsch: it tries every gap-free
-    pairing reachable inside the same diagonal band that NW searches and returns
-    the highest fractional identity found. The work is pure character equality
-    (no scoring matrix, no DP table, no traceback), so it is far cheaper than a
-    full NW call. Because a banded NW can only beat the best single diagonal by
-    *adding* gaps, this is a strong, selective signal for the accept/reject
-    decision: unrelated windows score near the ~6% random-residue background and
-    can be discarded before paying for NW, while genuine homologies (including
-    single-indel frame shifts, captured by scanning offsets) score high and pass.
-
-    Identity is taken over the overlapping length of the best diagonal — the most
-    optimistic denominator — so the value never *under*-states what NW could
-    reach on that diagonal, keeping the filter from rejecting real candidates.
-    """
-    la, lb = len(a), len(b)
-    if la == 0 or lb == 0:
-        return 0.0
-    best = 0.0
-    for d in range(-band, band + 1):
-        i0 = max(0, -d)
-        i1 = min(la, lb - d)
-        overlap = i1 - i0
-        if overlap <= 0:
-            continue
-        matches = 0
-        for i in range(i0, i1):
-            if a[i] == b[i + d]:
-                matches += 1
-        ident = matches / overlap
-        if ident > best:
-            best = ident
-    return best
 
 
 def make_edit_script(parent_aln: str, child_aln: str) -> List[EditOp]:

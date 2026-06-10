@@ -13,11 +13,12 @@ Layout under <db_dir>/:
 
 from __future__ import annotations
 
+import os
 import pickle
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Optional
 
 from hs_cablastp.forest_codec import pack_forest, unpack_forest
 from hs_cablastp.types import CompressedDB
@@ -35,35 +36,52 @@ def save_db(
     params: dict,
     makeblastdb_path: str = "makeblastdb",
 ) -> None:
-    db_dir.mkdir(parents=True, exist_ok=True)
+    # Build the whole database in a sibling staging dir and only move it into
+    # place once every step (coarse FASTA, forest blob, meta, makeblastdb) has
+    # succeeded. A makeblastdb failure or mid-write interruption then leaves no
+    # half-written db_dir for load_db to accept and search to choke on later,
+    # far from the cause.
+    db_dir = Path(db_dir)
+    parent = db_dir.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{db_dir.name}.", dir=parent))
+    try:
+        coarse_path = staging / COARSE_FASTA
+        with open(coarse_path, "w", encoding="ascii") as fh:
+            for root in db.roots():
+                fh.write(f">node_{root.node_id} {root.ref_original_seq}\n")
+                seq = root.sequence or ""
+                for i in range(0, len(seq), 60):
+                    fh.write(seq[i:i + 60] + "\n")
 
-    coarse_path = db_dir / COARSE_FASTA
-    with open(coarse_path, "w", encoding="ascii") as fh:
-        for root in db.roots():
-            fh.write(f">node_{root.node_id} {root.ref_original_seq}\n")
-            seq = root.sequence or ""
-            for i in range(0, len(seq), 60):
-                fh.write(seq[i:i + 60] + "\n")
+        with open(staging / FOREST_FILE, "wb") as fh:
+            fh.write(pack_forest(db.forest))
+        with open(staging / META_FILE, "wb") as fh:
+            pickle.dump({"params": params, "next_id": db._next_id}, fh)
 
-    with open(db_dir / FOREST_FILE, "wb") as fh:
-        fh.write(pack_forest(db.forest))
-    with open(db_dir / META_FILE, "wb") as fh:
-        pickle.dump({"params": params, "next_id": db._next_id}, fh)
-
-    # Build the BLAST coarse DB.
-    if any(db.roots()):
-        result = subprocess.run(
-            [
-                makeblastdb_path, "-dbtype", "prot",
-                "-in", str(coarse_path),
-                "-out", str(db_dir / BLAST_COARSE_DB),
-            ],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"makeblastdb failed (exit {result.returncode}):\n{result.stderr}"
+        # Build the BLAST coarse DB.
+        if any(db.roots()):
+            result = subprocess.run(
+                [
+                    makeblastdb_path, "-dbtype", "prot",
+                    "-in", str(coarse_path),
+                    "-out", str(staging / BLAST_COARSE_DB),
+                ],
+                capture_output=True, text=True,
             )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"makeblastdb failed (exit {result.returncode}):\n{result.stderr}"
+                )
+
+        # Commit: replace any existing db_dir with the fully-built staging dir.
+        if db_dir.exists():
+            shutil.rmtree(db_dir)
+        os.replace(staging, db_dir)
+        staging = None
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 def _read_root_seqs_from_coarse(path: Path) -> dict[int, str]:

@@ -47,6 +47,11 @@ class DBConf:
             ("BlastMakeBlastDB", self.BlastMakeBlastDB),
             ("BlastDBSize", str(self.BlastDBSize)),
         ]
+        # Intentional divergence from Go: values are written raw, not CSV-quoted.
+        # Keys are fixed identifiers and the only free-form value (BlastMakeBlastDB,
+        # a path) is read back with a single split on the first ':' (see
+        # load_db_conf), so a colon in a path round-trips fine here even though it
+        # would not through Go's csv writer/reader.
         out = "".join("%s:%s\n" % (k, v) for k, v in records)
         # Accept text- or binary-mode files.
         try:
@@ -134,6 +139,10 @@ def load_db_conf(stream: IO) -> DBConf:
             continue
         if ":" not in line:
             raise ValueError("Invalid DBConf line: %r" % raw_line)
+        # Split on the FIRST ':' only — deliberately laxer than Go's csv reader
+        # (which enforces exactly two ':'-delimited fields). This lets a value
+        # contain ':' (e.g. a Windows path like C:\\path\\to\\makeblastdb), which
+        # Go's reader would reject. Unknown keys are still caught below.
         key, value = line.split(":", 1)
         key = key.strip()
         value = value.strip()

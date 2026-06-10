@@ -75,7 +75,6 @@ class _Compressor:
     def __init__(
         self,
         k: int = K_MER_SIZE,
-        min_identity: float = MIN_IDENTITY,
         min_length: int = MIN_LENGTH,
         max_depth: int = MAX_DEPTH,
         min_identity_root: float = MIN_IDENTITY_ROOT,
@@ -83,7 +82,6 @@ class _Compressor:
         absorb_short_flanks: bool = ABSORB_SHORT_FLANKS,
     ):
         self.k = k
-        self.min_identity = min_identity
         self.min_length = min_length
         self.max_depth = max_depth
         self.min_identity_root = min_identity_root
@@ -195,10 +193,17 @@ class _Compressor:
                         parent_end=match.target_end,
                     )
                     target_node.children.append(child.node_id)
-                    # Step 2: index the child's own (matched) k-mers so later
-                    # sequences can seed-match it directly. Absorbed flank residues
-                    # are not seeded — they carry no standalone cluster signal.
-                    child_seq = seq[match.q_start:match.q_end]
+                    # Step 2: index the child's own k-mers so later sequences can
+                    # seed-match it directly. Seed the *reconstruction frame*
+                    # (seq[child_q_start:match.q_end]) — i.e. including any absorbed
+                    # leading flank — because a seed hit's offset is later used to
+                    # anchor extension into reconstruct(child_id), which begins with
+                    # that flank. Seeding only the matched region (offset 0 = first
+                    # matched residue) desynced every offset by lead_len once a flank
+                    # was absorbed, anchoring extension on the wrong residues. With no
+                    # absorbed flank child_q_start == match.q_start, so this seeds the
+                    # matched region exactly, as before.
+                    child_seq = seq[child_q_start:match.q_end]
                     self.seeds.add_node_sequence(child.node_id, child_seq)
                     last_child = child
                     last_child_parent_seg_len = match.target_end - match.target_start
@@ -235,6 +240,9 @@ class _Compressor:
                 last_child.ref_original_seq = (
                     f"{fasta_id}:{last_child_q_start}-{N}"
                 )
+                # The diff_script just grew; a reconstruction cached during this
+                # sequence's own seed loop is now stale (too short), so evict it.
+                self._invalidate_cache(last_child.node_id)
             else:
                 self._make_root(fasta_id, seq, pending_root_start, N)
 
@@ -289,13 +297,10 @@ class _Compressor:
                 )
                 if len(q_sub) < self.min_length:
                     continue
-                # NB: an older revision gated this call with a cheap
-                # best_diagonal_identity prefilter to skip NW on candidates
-                # unlikely to reach the threshold. Profiling after parasail
-                # was wired in (~0.05 ms/NW vs ~1 ms/prefilter scan) showed
-                # the prefilter cost more than the NW it avoided, *and* its
-                # band=4 gap-free assumption silently rejected real homologs
-                # with wider indels. With parasail on, run NW unconditionally.
+                # Run NW unconditionally: with parasail's SIMD kernel a cheap
+                # gap-free identity prefilter cost more than the NW it would
+                # have avoided, and its narrow-band assumption silently rejected
+                # real homologs with wider indels.
                 parent_aln, child_aln = needleman_wunsch(
                     t_sub, q_sub, band=GAPPED_BAND
                 )
@@ -399,16 +404,19 @@ def compress_fasta(
     input_paths: List[str],
     *,
     k: int = K_MER_SIZE,
-    min_identity: float = MIN_IDENTITY,
     min_length: int = MIN_LENGTH,
     max_depth: int = MAX_DEPTH,
+    min_identity_root: float = MIN_IDENTITY_ROOT,
+    min_identity_child: float = MIN_IDENTITY_CHILD,
     progress=None,
 ) -> _Compressor:
     """Compress one or more FASTA files into an HS-CaBLASTP forest."""
     from cablastp.fasta import FastaReader
 
     comp = _Compressor(
-        k=k, min_identity=min_identity, min_length=min_length, max_depth=max_depth,
+        k=k, min_length=min_length, max_depth=max_depth,
+        min_identity_root=min_identity_root,
+        min_identity_child=min_identity_child,
     )
     total = 0
     total_residues = 0

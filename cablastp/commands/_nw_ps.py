@@ -6,6 +6,12 @@ Same signature and contract as cablastp.commands._nw.nw_align:
 
 The `mem` arena from the pure-Python kernel is unused: parasail allocates its
 own scratch internally. We accept it to keep the call site identical.
+
+Approximation: the pure-Python/Go kernel constrains long alignments to a
+diagonal band of width max(len)/4, but parasail's banded NW provides no
+traceback, so this backend always runs the full (n*m) NW. The optimal global
+alignment can therefore differ from the reference when the best path strays
+outside that band — rare for the near-diagonal homologies cablastp aligns.
 """
 
 from __future__ import annotations
@@ -36,24 +42,30 @@ for _i in range(len(_ALPHA_STR)):
 _GAP_OPEN = -int(_M62[0][-1])    # residue-vs-gap penalty = 4
 _GAP_EXTEND = _GAP_OPEN
 
-# Map any unknown residue byte to 'X' so parasail's lookup doesn't crash.
-# Build a 256-byte translation table once.
-_X = ord(b"X")
+# Map any unknown residue byte to 'A' (BLOSUM62 index 0) so parasail's lookup
+# can't crash AND scores it exactly as the Go/pure-Python kernel does: both fold
+# out-of-alphabet residues onto index 0 (_RES_TRANS in _nw.py defaults to 0), not
+# 'X'. An unknown vs 'A' then scores MATRIX62[0][...] in every backend instead of
+# diverging on the 'X' row. The ORIGINAL bytes are threaded back via _restore, so
+# this only affects scoring, never the residues emitted into the diff. Build the
+# 256-byte table once.
+_UNKNOWN = _ALPHA_BYTES[0]   # ord('A'), the index-0 residue
 _TRANS = bytearray(256)
 for _b in range(256):
-    _TRANS[_b] = _b if _b in _ALPHA_BYTES else _X
+    _TRANS[_b] = _b if _b in _ALPHA_BYTES else _UNKNOWN
 _TRANS = bytes(_TRANS)
 
 
 def _restore(aligned: str, original: bytes) -> bytes:
     """Re-thread the ORIGINAL residue bytes into parasail's gap structure.
 
-    We align the 'X'-cleansed copies so parasail's matrix lookup can't crash on
-    residues outside ALPHABET62, but those substituted 'X's must never leak into
-    the returned alignment: cablastp stores the aligned residues verbatim in the
-    diff/edit script, so an 'X' here would make decompression lossy. The aligned
-    string is the input with '-' gaps inserted, so its non-gap characters map
-    1:1, in order, back onto `original`.
+    We align copies whose out-of-alphabet residues were folded to 'A' (so
+    parasail's matrix lookup can't crash on residues outside ALPHABET62), but
+    those substituted residues must never leak into the returned alignment:
+    cablastp stores the aligned residues verbatim in the diff/edit script, so a
+    folded residue here would make decompression lossy. The aligned string is the
+    input with '-' gaps inserted, so its non-gap characters map 1:1, in order,
+    back onto `original`.
     """
     out = bytearray()
     k = 0
@@ -72,8 +84,8 @@ def nw_align_ps(rseq: bytes, oseq: bytes, mem) -> Tuple[bytes, bytes]:
         return b"-" * len(oseq), bytes(oseq)
     if not oseq:
         return bytes(rseq), b"-" * len(rseq)
-    # Align 'X'-cleansed copies (so parasail's lookup can't crash on residues
-    # outside ALPHABET62) but thread the ORIGINAL bytes back into the result.
+    # Align copies whose out-of-alphabet residues are folded to 'A' (so
+    # parasail's lookup can't crash) but thread the ORIGINAL bytes back in.
     rs = rseq.translate(_TRANS).decode("ascii")
     os = oseq.translate(_TRANS).decode("ascii")
     r = parasail.nw_trace_scan_16(rs, os, _GAP_OPEN, _GAP_EXTEND, _PS_MATRIX)

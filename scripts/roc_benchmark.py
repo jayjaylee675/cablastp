@@ -354,8 +354,8 @@ def main() -> int:
                          "the fasta filename).")
     ap.add_argument("--timing-reps", type=int, default=3,
                     help="Run each pipeline's search this many times and report "
-                         "the median search time (BLAST timing is noisy; default 3). "
-                         "Hits are deterministic, so only timing repeats.")
+                         "the mean +/- std search time (BLAST timing is noisy; "
+                         "default 3). Hits are deterministic, so only timing repeats.")
     ap.add_argument("--coarse-evalue", type=float, default=1e-3,
                     help="Coarse-search E-value used by BOTH pipelines (default "
                          "1e-3). cablastp's native default is 5.0 and hs-cablastp's "

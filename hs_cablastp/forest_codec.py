@@ -26,7 +26,7 @@ Layout (no padding, all little-endian where it matters):
     flags          uint8   (bit0 is_root, bit2 has_parent; bit1 unused in v2)
     parent_block   [varuint parent_id, varuint parent_start, varuint parent_end]
                                                   iff has_parent
-    depth          uint8
+    depth          varuint
     ref_idx        varuint
     num_children   varuint
     children       varuint*
@@ -120,7 +120,11 @@ def pack_forest(forest: Dict[int, TreeNode]) -> bytes:
             _write_varuint(out, node.parent_start)
             _write_varuint(out, node.parent_end)
 
-        out.append(node.depth)
+        # varuint, not a raw byte: --max-depth is unbounded, and a depth >= 256
+        # would silently overflow out.append() mid-serialization. For depth < 128
+        # (every real DB) the encoding is byte-identical to the old single byte,
+        # so existing v2 blobs still load.
+        _write_varuint(out, node.depth)
         _write_varuint(out, refs[node.ref_original_seq or ""])
 
         _write_varuint(out, len(node.children))
@@ -176,9 +180,13 @@ def unpack_forest(buf: bytes) -> Dict[int, TreeNode]:
             parent_start, pos = _read_varuint(buf, pos)
             parent_end, pos = _read_varuint(buf, pos)
 
-        depth = buf[pos]
-        pos += 1
+        depth, pos = _read_varuint(buf, pos)
         ref_idx, pos = _read_varuint(buf, pos)
+        if ref_idx >= len(refs):
+            raise ValueError(
+                "malformed HSFOREST blob: ref_idx %d out of range (%d refs)"
+                % (ref_idx, len(refs))
+            )
 
         n_children, pos = _read_varuint(buf, pos)
         children: List[int] = []
@@ -191,6 +199,10 @@ def unpack_forest(buf: bytes) -> Dict[int, TreeNode]:
         for _ in range(n_ops):
             tag = buf[pos]
             pos += 1
+            if tag >= len(_OP_NAME):
+                raise ValueError(
+                    "malformed HSFOREST blob: invalid op tag %d" % tag
+                )
             position, pos = _read_varuint(buf, pos)
             ch_byte = buf[pos]
             pos += 1

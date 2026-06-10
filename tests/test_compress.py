@@ -9,7 +9,6 @@ from cablastp.commands._compress_core import extend_match, skip_low_complexity
 from cablastp.commands._memory import new_memory
 from cablastp.commands._nw import nw_align
 from cablastp.blosum import ALPHABET62, MATRIX62
-from cablastp.seq import seq_identity
 
 
 _RES_IDX = {c: i for i, c in enumerate(ALPHABET62)}

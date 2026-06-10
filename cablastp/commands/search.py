@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import io
 import os
 import shutil
 import subprocess
@@ -12,7 +11,6 @@ from typing import List, Optional
 
 from cablastp import misc
 from cablastp.db import new_read_db, FILE_BLAST_COARSE, FILE_BLAST_FINE
-from cablastp.exec_util import run_command
 from cablastp.commands._search_common import (
     expand_blast_hits,
     make_fine_blast_db,
@@ -47,6 +45,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Only emit errors to stderr.")
     parser.add_argument("--cpuprofile", default="", help="(Ignored.)")
     parser.add_argument("--memprofile", default="", help="(Ignored.)")
+    # nargs=2 is intentionally stricter than Go (which silently ignores extra
+    # positional args); we reject 3+ rather than quietly drop them.
     parser.add_argument("paths", nargs=2,
                         help="database-directory query-fasta-file")
     return parser
@@ -139,6 +139,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     misc.vprintln("Blasting query on fine database...")
     rc = _blast_fine(args, db, tmp_dir, query_bytes, blast_args)
+    if rc != 0:
+        # Match Go's fatal "Error blasting fine database": blastp's own stderr
+        # already streamed through, but without this wrapper a non-zero exit was
+        # returned silently with no context.
+        sys.stderr.write("Error blasting fine database (blastp exit %d)\n" % rc)
 
     if not args.no_cleanup:
         try:

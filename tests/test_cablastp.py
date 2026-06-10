@@ -5,8 +5,6 @@ from __future__ import annotations
 import io
 from dataclasses import asdict
 
-import pytest
-
 from cablastp.dbconf import DBConf, default_db_conf, load_db_conf
 from cablastp.seeds import Seeds
 from cablastp.seqdiff import (

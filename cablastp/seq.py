@@ -66,7 +66,11 @@ class Sequence:
                 % (start, end, len(self.residues))
             )
         sub = Sequence(self.id, self.name, self.residues[start:end])
-        sub.offset = self.offset + start
+        # Mirror Go's newSubSequence, which sets the offset to `start` (relative
+        # to this sequence) rather than accumulating self.offset. Current callers
+        # only subsequence offset-0 sequences so the values coincide, but the Go
+        # contract is a plain reset.
+        sub.offset = start
         return sub
 
     def fasta_seq(self) -> "FastaSequence":

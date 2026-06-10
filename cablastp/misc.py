@@ -38,6 +38,12 @@ def print_flag_defaults(parser) -> None:
             continue
         # Pick the longest option string (the canonical form).
         name = max(action.option_strings, key=len).lstrip("-")
-        default = "" if action.default is None else action.default
+        default = action.default
+        if default is None:
+            default = ""
+        elif isinstance(default, bool):
+            # Go printed bool flag defaults lowercase ("true"/"false"), whereas
+            # Python's str(True) is "True".
+            default = str(default).lower()
         help_text = action.help or ""
         print('--%s="%s"\n\t%s' % (name, default, help_text))

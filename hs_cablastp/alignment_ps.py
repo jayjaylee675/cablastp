@@ -1,17 +1,21 @@
-"""Parasail-backed Needleman-Wunsch — prototype.
+"""Parasail-backed Needleman-Wunsch.
 
 Drop-in for hs_cablastp.alignment.needleman_wunsch using parasail's SIMD NW.
-Same signature, same scoring (BLOSUM62 + the existing kernel's effective
-zero gap penalty — see KNOWN_ISSUES.md / discussion: MATRIX62[gap][gap]=0).
+Same signature, same scoring: BLOSUM62 substitutions with a linear -4 gap
+(open == extend == 4, the residue-vs-gap penalty the pure-Python/Go kernel
+charges — NOT MATRIX62[gap][gap]=0, the gap-vs-gap corner the DP never visits).
 
-Caveats vs the pure-Python kernel:
-- With gap_open = gap_extend = 0, many NW alignments tie on score. Parasail
-  resolves ties differently than the pure-Python kernel, so the returned
-  gap-padded strings can differ even when the score (and downstream identity)
-  is identical.
-- Parasail's banded NW does not provide trace, so we always use full NW with
-  trace and accept the (n*m) work. For the candidate-window sizes used in
-  hs-cablastp this is still well within the SIMD kernel's sweet spot.
+Backend-dependence to be aware of:
+- Tie-breaking. When two alignments score equally, parasail's traceback may
+  place gaps differently than the pure-Python diagonal-preferring traceback.
+  The score and downstream identity match; only the exact gap-padded strings
+  can differ. With the correct -4 gap penalty ties are now rare (the old zero
+  gap penalty made them common), but pin/log the active backend when you need
+  byte-reproducible benchmark output.
+- Band. Parasail's banded NW provides no traceback, so we always run the full
+  (n*m) NW. For the candidate-window sizes used in hs-cablastp this is well
+  within the SIMD kernel's sweet spot, but it ignores the `band` argument that
+  the pure-Python path honours.
 """
 
 from __future__ import annotations

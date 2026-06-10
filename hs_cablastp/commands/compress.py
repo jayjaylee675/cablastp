@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 from hs_cablastp.compress import (
-    K_MER_SIZE, MAX_DEPTH, MIN_IDENTITY, MIN_LENGTH, compress_fasta,
+    K_MER_SIZE, MAX_DEPTH, MIN_IDENTITY_CHILD, MIN_IDENTITY_ROOT, MIN_LENGTH,
+    compress_fasta,
 )
 from hs_cablastp.io import save_db
 
@@ -21,8 +22,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("db_dir", help="Output database directory")
     p.add_argument("fasta", nargs="+", help="One or more input FASTA files")
     p.add_argument("--k", type=int, default=K_MER_SIZE, help=f"Seed k-mer size (default {K_MER_SIZE})")
-    p.add_argument("--min-identity", type=float, default=MIN_IDENTITY,
-                   help=f"Minimum parent/child identity (default {MIN_IDENTITY})")
+    p.add_argument("--min-identity-root", type=float, default=MIN_IDENTITY_ROOT,
+                   help="Minimum identity to attach under a root/depth-0 node "
+                        f"(default {MIN_IDENTITY_ROOT})")
+    p.add_argument("--min-identity-child", type=float, default=MIN_IDENTITY_CHILD,
+                   help="Minimum identity to attach under a depth>=1 node "
+                        f"(default {MIN_IDENTITY_CHILD})")
     p.add_argument("--min-length", type=int, default=MIN_LENGTH,
                    help=f"Minimum matched-region length (default {MIN_LENGTH})")
     p.add_argument("--max-depth", type=int, default=MAX_DEPTH,
@@ -52,9 +57,10 @@ def main(argv=None) -> int:
     comp = compress_fasta(
         args.fasta,
         k=args.k,
-        min_identity=args.min_identity,
         min_length=args.min_length,
         max_depth=args.max_depth,
+        min_identity_root=args.min_identity_root,
+        min_identity_child=args.min_identity_child,
         progress=progress,
     )
     elapsed = time.perf_counter() - t0
@@ -65,7 +71,9 @@ def main(argv=None) -> int:
     print(f"Compression took {elapsed:.2f}s")
 
     params = {
-        "k": args.k, "min_identity": args.min_identity,
+        "k": args.k,
+        "min_identity_root": args.min_identity_root,
+        "min_identity_child": args.min_identity_child,
         "min_length": args.min_length, "max_depth": args.max_depth,
         # Original (uncompressed) database size; used by search to set blastp's
         # -dbsize so fine-search e-values match a search of the full DB.

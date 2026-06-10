@@ -94,7 +94,6 @@ class FastaWriter:
 
     def __init__(self, stream: IO, asterisk: bool = False, line_width: int = 60):
         self._stream = stream
-        self._binary = "b" in getattr(stream, "mode", "") or hasattr(stream, "write") and isinstance(getattr(stream, "buffer", None), io.RawIOBase)
         self.asterisk = asterisk
         self.line_width = line_width
 
@@ -106,7 +105,7 @@ class FastaWriter:
             self._stream.write(s.encode("utf-8"))
 
     def write(self, seq: FastaSequence) -> None:
-        self._write("> " + seq.name + "\n")
+        self._write(">" + seq.name + "\n")
         residues = seq.residues if isinstance(seq.residues, (bytes, bytearray)) else bytes(seq.residues)
         text = residues.decode("ascii")
         if self.line_width and self.line_width > 0:

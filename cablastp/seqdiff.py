@@ -147,11 +147,23 @@ def parse_edit_script(script: str) -> EditScript:
     cur: Optional[_Mod] = None
     i = 0
     n = len(script)
+
+    def _commit(mod: _Mod) -> None:
+        # Go requires a residue (or, for a deletion, a '-') after the offset; a
+        # bare "s5"/"i5"/"d5" with nothing trailing leaves a residue-less mod
+        # (no residues AND zero span). Reject it instead of silently emitting it.
+        if not mod.residues and mod.end == mod.start:
+            raise ValueError(
+                "Expected a residue after the offset in '%s', but the "
+                "modification was empty." % script
+            )
+        mods.append(mod)
+
     while i < n:
         b = script[i]
         if b in ("s", "i", "d"):
             if cur is not None:
-                mods.append(cur)
+                _commit(cur)
             new_mod = _Mod(_byte_to_mod_kind(b))
             digits: List[str] = []
             j = i + 1
@@ -192,5 +204,5 @@ def parse_edit_script(script: str) -> EditScript:
         i += 1
 
     if cur is not None:
-        mods.append(cur)
+        _commit(cur)
     return EditScript(mods)
