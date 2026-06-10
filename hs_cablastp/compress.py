@@ -36,6 +36,15 @@ GAPPED_BAND = 10          # NW band width
 EXTEND_DROP = 12          # X-drop for ungapped extension
 MISS_STRIDE = 2           # sparse seeding: advance by this many on a failed seed
 RECON_CACHE_MAX = 1000    # bounded LRU size for reconstructed-sequence cache
+# Absorb short (<MIN_LENGTH) unmatched flanks into the adjacent matched child as
+# INSERT ops, instead of emitting them as standalone coarse roots. On redundant
+# data these short flanks were proliferating as duplicate roots (301 byte-
+# identical sub-40aa roots on dense_2k) that multiply coarse hits and slow the
+# search. Folding them into a neighbour keeps the reconstruction lossless (the
+# flank residues become INSERTs) while removing them from the coarse FASTA / seed
+# table. Long flanks (>=MIN_LENGTH) still become roots — they can seed-cluster
+# future sequences and may carry standalone homology, so we keep them searchable.
+ABSORB_SHORT_FLANKS = True
 # Boundary overlap: each root carries OVERLAP_RESIDUES extra residues on each
 # side of its natural [start, end] range (clamped to the input bounds). HSPs
 # that straddle the natural split now have a chance of landing fully inside
@@ -71,6 +80,7 @@ class _Compressor:
         max_depth: int = MAX_DEPTH,
         min_identity_root: float = MIN_IDENTITY_ROOT,
         min_identity_child: float = MIN_IDENTITY_CHILD,
+        absorb_short_flanks: bool = ABSORB_SHORT_FLANKS,
     ):
         self.k = k
         self.min_identity = min_identity
@@ -78,6 +88,7 @@ class _Compressor:
         self.max_depth = max_depth
         self.min_identity_root = min_identity_root
         self.min_identity_child = min_identity_child
+        self.absorb_short_flanks = absorb_short_flanks
         self.db = CompressedDB()
         self.seeds = SeedTable(k)
         # Bounded LRU: node_id -> reconstructed string. The original unbounded
@@ -132,6 +143,13 @@ class _Compressor:
             return
         pos = 0
         pending_root_start = 0
+        # Track the most recently created child so a short trailing flank can be
+        # absorbed into it (see ABSORB_SHORT_FLANKS). Reset whenever the last
+        # emitted region was a root, so we never glue a flank onto a non-adjacent
+        # child.
+        last_child: Optional[TreeNode] = None
+        last_child_parent_seg_len = 0
+        last_child_q_start = 0
         while pos + self.k <= N:
             kmer = seq[pos:pos + self.k]
             hits = self.seeds.lookup(kmer)
@@ -140,37 +158,55 @@ class _Compressor:
                 match = self._best_match(seq, pos, hits)
 
             if match is not None:
-                # Flush any preceding unmatched region as a new root.
-                # MUST preserve every leftover residue (debug.md "CRITICAL").
-                if match.q_start > pending_root_start:
-                    self._make_root(
-                        fasta_id, seq, pending_root_start, match.q_start
-                    )
-                # Attach child to the best target (possibly deeper than root).
                 target_node = self.db.forest[match.target_id]
-                if target_node.depth < self.max_depth:
+                child_eligible = target_node.depth < self.max_depth
+                # Leading unmatched flank [pending_root_start, match.q_start).
+                lead_start, lead_end = pending_root_start, match.q_start
+                lead_len = lead_end - lead_start
+                absorb_lead = (
+                    self.absorb_short_flanks and child_eligible
+                    and 0 < lead_len < self.min_length
+                )
+                if lead_len > 0 and not absorb_lead:
+                    # Long flank, or no child to absorb into: keep as a root.
+                    # MUST preserve every leftover residue (debug.md "CRITICAL").
+                    self._make_root(fasta_id, seq, lead_start, lead_end)
+
+                if child_eligible:
                     diff_script = make_edit_script(match.parent_aln, match.child_aln)
+                    child_q_start = match.q_start
+                    if absorb_lead:
+                        # Prepend the flank residues as INSERTs at position 0 of
+                        # the matched window. Lossless (apply_edit_script emits
+                        # position-0 INSERTs before the first parent residue, in
+                        # script order) and removes a duplicate short root.
+                        diff_script = [
+                            EditOp("INSERT", 0, c) for c in seq[lead_start:lead_end]
+                        ] + diff_script
+                        child_q_start = lead_start
                     child = self.db.new_node(
                         is_root=False,
                         sequence=None,
                         parent_id=match.target_id,
                         diff_script=diff_script,
                         depth=target_node.depth + 1,
-                        ref_original_seq=f"{fasta_id}:{match.q_start}-{match.q_end}",
+                        ref_original_seq=f"{fasta_id}:{child_q_start}-{match.q_end}",
                         parent_start=match.target_start,
                         parent_end=match.target_end,
                     )
                     target_node.children.append(child.node_id)
-                    # Step 2: index the child's own k-mers so later sequences
-                    # can seed-match it directly (deeper clustering) instead of
-                    # only ever attaching to roots.
+                    # Step 2: index the child's own (matched) k-mers so later
+                    # sequences can seed-match it directly. Absorbed flank residues
+                    # are not seeded — they carry no standalone cluster signal.
                     child_seq = seq[match.q_start:match.q_end]
                     self.seeds.add_node_sequence(child.node_id, child_seq)
+                    last_child = child
+                    last_child_parent_seg_len = match.target_end - match.target_start
+                    last_child_q_start = child_q_start
                 else:
                     # Depth cap reached: emit this region as a new root instead.
-                    self._make_root(
-                        fasta_id, seq, match.q_start, match.q_end
-                    )
+                    self._make_root(fasta_id, seq, match.q_start, match.q_end)
+                    last_child = None
                 pos = match.q_end
                 pending_root_start = pos
             else:
@@ -179,12 +215,28 @@ class _Compressor:
                 # always fail too, so re-running extension/NW at every offset is
                 # wasteful. Stride forward to skip the redundant work. Data is
                 # still preserved: the skipped residues stay inside the pending
-                # root region and are flushed by _make_root below.
+                # root region and are flushed below.
                 pos += MISS_STRIDE if hits else 1
 
         # Flush trailing region. MUST preserve every leftover residue.
         if N > pending_root_start:
-            self._make_root(fasta_id, seq, pending_root_start, N)
+            tail_len = N - pending_root_start
+            if (
+                self.absorb_short_flanks and last_child is not None
+                and 0 < tail_len < self.min_length
+            ):
+                # Absorb the short trailing flank into the last child as INSERTs
+                # at the end of its matched window (position == parent segment
+                # length, which apply_edit_script emits after the final residue).
+                last_child.diff_script.extend(
+                    EditOp("INSERT", last_child_parent_seg_len, c)
+                    for c in seq[pending_root_start:N]
+                )
+                last_child.ref_original_seq = (
+                    f"{fasta_id}:{last_child_q_start}-{N}"
+                )
+            else:
+                self._make_root(fasta_id, seq, pending_root_start, N)
 
     def _make_root(self, fasta_id: str, seq: str, start: int, end: int) -> TreeNode:
         # Extend the natural [start, end] range by OVERLAP_RESIDUES on each
