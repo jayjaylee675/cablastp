@@ -27,10 +27,13 @@ for _i in range(len(_ALPHA_STR)):
     for _j in range(len(_ALPHA_STR)):
         _PS_MATRIX.set_value(_i, _j, int(_M62[_i][_j]))
 
-# Match the pure-Python kernel's effective gap penalty (MATRIX62[gap][gap] = 0
-# in current NCBI BLOSUM62 — that's the existing behavior; preserved for
-# bit-equivalent scoring, not because zero is biologically correct).
-_GAP_OPEN = -int(_M62[-1][-1])
+# Gap penalty. The pure-Python/Go kernel charges matrix[residue][gap] for every
+# gap cell — the residue-vs-gap score in the last MATRIX62 column, which is -4.
+# (NOT MATRIX62[gap][gap]=0, the gap-vs-gap *corner* the DP never visits — that
+# bug made parasail score gaps as free and diverge from the reference.) parasail
+# uses positive open/extend penalties and charges `open + (len-1)*extend` for a
+# gap of `len`, so open == extend == 4 reproduces the reference's linear -4 gap.
+_GAP_OPEN = -int(_M62[0][-1])    # residue-vs-gap penalty = 4
 _GAP_EXTEND = _GAP_OPEN
 
 # Map any unknown residue byte to 'X' so parasail's lookup doesn't crash.
@@ -42,16 +45,39 @@ for _b in range(256):
 _TRANS = bytes(_TRANS)
 
 
+def _restore(aligned: str, original: bytes) -> bytes:
+    """Re-thread the ORIGINAL residue bytes into parasail's gap structure.
+
+    We align the 'X'-cleansed copies so parasail's matrix lookup can't crash on
+    residues outside ALPHABET62, but those substituted 'X's must never leak into
+    the returned alignment: cablastp stores the aligned residues verbatim in the
+    diff/edit script, so an 'X' here would make decompression lossy. The aligned
+    string is the input with '-' gaps inserted, so its non-gap characters map
+    1:1, in order, back onto `original`.
+    """
+    out = bytearray()
+    k = 0
+    gap = ord("-")
+    for ch in aligned.encode("ascii"):
+        if ch == gap:
+            out.append(gap)
+        else:
+            out.append(original[k])
+            k += 1
+    return bytes(out)
+
+
 def nw_align_ps(rseq: bytes, oseq: bytes, mem) -> Tuple[bytes, bytes]:
     if not rseq:
         return b"-" * len(oseq), bytes(oseq)
     if not oseq:
         return bytes(rseq), b"-" * len(rseq)
-    # Cleanse unknown residues into 'X' (which parasail's BLOSUM62 row scores).
+    # Align 'X'-cleansed copies (so parasail's lookup can't crash on residues
+    # outside ALPHABET62) but thread the ORIGINAL bytes back into the result.
     rs = rseq.translate(_TRANS).decode("ascii")
     os = oseq.translate(_TRANS).decode("ascii")
     r = parasail.nw_trace_scan_16(rs, os, _GAP_OPEN, _GAP_EXTEND, _PS_MATRIX)
     # parasail returns the aligned forms of the inputs in order:
     #   .query == aligned form of the first arg (= rseq)
     #   .ref   == aligned form of the second arg (= oseq)
-    return r.traceback.query.encode("ascii"), r.traceback.ref.encode("ascii")
+    return _restore(r.traceback.query, rseq), _restore(r.traceback.ref, oseq)

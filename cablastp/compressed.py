@@ -85,6 +85,7 @@ class CompressedDB:
         self._index_size: int = 0
         self._writer_queue: Optional["queue.Queue"] = None
         self._writer_thread: Optional[threading.Thread] = None
+        self._writer_exc: Optional[BaseException] = None
         self._seq_cache: Optional[dict] = None
         self._closed = False
 
@@ -170,6 +171,13 @@ class CompressedDB:
             self._writer_queue.put(_WRITER_DONE)
         if self._writer_thread is not None:
             self._writer_thread.join()
+        # Surface any failure the writer thread hit. Without this, an exception
+        # in the daemon writer would just kill the thread: join() returns
+        # normally and the caller reports a truncated DB as success.
+        if self._writer_exc is not None:
+            exc = self._writer_exc
+            self._writer_exc = None
+            raise exc
 
     # ------------------------------------------------------------------ I/O
 
@@ -202,6 +210,22 @@ class CompressedDB:
     # ----------------------------------------------------------------- writer
 
     def _writer(self) -> None:
+        # Run the write loop in this worker thread. Any exception here would
+        # otherwise silently kill the daemon thread — join() returns normally and
+        # the caller reports a truncated DB as success — so capture it for
+        # write_close() to re-raise on the main thread, and always close the
+        # handles so a partial DB is at least flushed and consistent on disk.
+        try:
+            self._writer_loop()
+        except BaseException as exc:  # noqa: BLE001 — re-raised in write_close()
+            self._writer_exc = exc
+        finally:
+            if self.index is not None:
+                self.index.close()
+            if self.file is not None:
+                self.file.close()
+
+    def _writer_loop(self) -> None:
         # Maintains the original-sequence ordering of incoming compressed
         # sequences before flushing to disk, matching the Go writer.
         saved: List[CompressedSeq] = []
@@ -253,9 +277,6 @@ class CompressedDB:
                 byte_offset += len(encoded)
                 next_index += 1
                 cseq, saved = _next_seq_to_write(next_index, saved)
-
-        self.index.close()
-        self.file.close()
 
 
 def _next_seq_to_write(next_index: int, saved: List[CompressedSeq]):

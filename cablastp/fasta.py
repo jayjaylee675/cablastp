@@ -70,6 +70,20 @@ class FastaReader:
                 return
             yield seq
 
+    def detach(self) -> None:
+        """Release an internally-wrapped binary stream without closing it.
+
+        When constructed over a binary handle we wrap it in a TextIOWrapper; if
+        that wrapper is later garbage-collected it closes the underlying handle.
+        A caller that must keep the handle open (e.g. CoarseDB reads the coarse
+        FASTA and then appends to the same handle) calls this after reading to
+        EOF to take back ownership of the stream. No-op when no wrapper was
+        created (the stream was already text). The reader must not be used after.
+        """
+        if isinstance(self._text, io.TextIOWrapper) and self._text is not self._stream:
+            self._text.detach()
+            self._text = None
+
 
 class FastaWriter:
     """Write FASTA records.

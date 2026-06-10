@@ -285,6 +285,12 @@ class CoarseDB:
             self.seqs.append(new_fasta_coarse_seq(i, seq))
             i += 1
         self._seqs_read = len(self.seqs)
+        # FastaReader wrapped our binary handle in a TextIOWrapper; releasing it
+        # (we've consumed to EOF, so the handle is positioned at end) keeps
+        # self.file_fasta open for the subsequent --append _save_fasta, which
+        # fstat()s and writes to this same handle. Without this the wrapper would
+        # close the handle on GC and _save_fasta would raise on a closed file.
+        reader.detach()
 
         vprintf("\t\tDone reading %s (%.3fs).\n", FILE_COARSE_FASTA, time.time() - start)
 

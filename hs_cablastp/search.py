@@ -75,6 +75,35 @@ def _run_blastp(
     return rows
 
 
+def _segment_to_recon_offset(diff_script: List[EditOp], seg_offset: int) -> int:
+    """Map a 0-based offset within a child's parent-matched segment to the
+    corresponding offset within that child's *reconstructed* sequence.
+
+    A child's reconstruction is ``apply_edit_script(parent_segment, diff_script)``
+    (see ``reconstruct_sequence``). INSERTs lengthen and DELETEs shorten the
+    output relative to the parent segment, so the two coordinate frames drift
+    apart by the net indel count. Pruning passes coverage ranges *down* the tree,
+    where a grandchild's ``parent_start``/``parent_end`` are offsets into this
+    child's reconstruction — so the inherited range must be expressed in that
+    same frame, not the parent-segment frame, or depth>=2 intersections compare
+    mismatched coordinates and silently drop legitimate candidates.
+    """
+    inserts: Dict[int, int] = {}
+    deletes: Set[int] = set()
+    for op in diff_script:
+        if op.op_type == "INSERT":
+            inserts[op.position] = inserts.get(op.position, 0) + 1
+        elif op.op_type == "DELETE":
+            deletes.add(op.position)
+    out = 0
+    for i in range(seg_offset):
+        out += inserts.get(i, 0)
+        if i not in deletes:
+            out += 1
+    out += inserts.get(seg_offset, 0)
+    return out
+
+
 def _heuristic_keep(
     child: TreeNode, q_range_on_parent: Tuple[int, int],
     threshold: float,
@@ -107,11 +136,16 @@ def _heuristic_keep(
     score = 1.0 - (disruptions / max(window_len, 1))
     if score < threshold:
         return False, (0, 0)
-    # The child's "new coordinate system" — translate the intersection range into
-    # offsets relative to the child's matched segment, which is what its own
-    # children will be indexed against.
-    new_a = isect_a - pstart
-    new_b = isect_b - pstart
+    # Translate the intersection into the child's *reconstructed-sequence* frame —
+    # the coordinate system its own children's parent_start/parent_end index
+    # against. Subtracting pstart gives the offset within the child's matched
+    # segment; the diff script then maps that through the child's indels into the
+    # reconstruction frame (the two diverge once the child carries INSERTs/DELETEs,
+    # which is exactly when the old parent-segment-frame return broke depth>=2).
+    seg_a = isect_a - pstart
+    seg_b = isect_b - pstart
+    new_a = _segment_to_recon_offset(child.diff_script, seg_a)
+    new_b = _segment_to_recon_offset(child.diff_script, seg_b)
     return True, (new_a, new_b)
 
 

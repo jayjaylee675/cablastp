@@ -100,11 +100,16 @@ class DB:
     # -------------------------------------------------------- save/close
 
     def save(self) -> None:
-        if not self._appending:
-            self._params_file.truncate(0)
-            self._params_file.seek(0, os.SEEK_SET)
-            self.conf.write(self._params_file)
-            self._params_file.flush()
+        # Always (re)write the params file, including on --append. The Go
+        # original only wrote it on first creation, which left BlastDBSize stale
+        # after an append and silently inflated -dbsize-based e-values at search
+        # time. self.conf is the flag-merged config (file values preserved for
+        # non-explicit flags) with BlastDBSize accumulated over the appended
+        # residues, so rewriting it keeps -dbsize correct.
+        self._params_file.truncate(0)
+        self._params_file.seek(0, os.SEEK_SET)
+        self.conf.write(self._params_file)
+        self._params_file.flush()
 
         self.coarse_db.save()
 

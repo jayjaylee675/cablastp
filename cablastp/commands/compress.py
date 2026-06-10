@@ -166,7 +166,12 @@ def _cleanup(args, db: DB, pool: CompressPool) -> None:
     except Exception as err:
         sys.stderr.write("Could not save database: %s\n" % err)
         sys.exit(1)
-    db.write_close()
+    try:
+        db.write_close()
+    except Exception as err:
+        # The compressed writer thread failed; the on-disk DB is incomplete.
+        sys.stderr.write("Could not finalize compressed database: %s\n" % err)
+        sys.exit(1)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -236,7 +241,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 return 1
             if item.seq is None:
                 break
-            conf.BlastDBSize += item.seq.Len()
+            # Accumulate into db.conf (the live object that db.save() writes).
+            # On --append, new_write_db reassigns db.conf to flag_merge()'s
+            # result, so the local `conf` is no longer the saved object; adding
+            # to `conf` here would silently drop appended residues from -dbsize.
+            db.conf.BlastDBSize += item.seq.Len()
             org_seq_id = pool.compress(org_seq_id, item.seq)
             _verbose_output(args, org_seq_id, timer_state)
             if args.max_seeds > 0 and org_seq_id % 10000 == 0:
