@@ -51,7 +51,7 @@ ABSORB_SHORT_FLANKS = True
 # one of the extended roots — fixing the "fragment-boundary HSP loss" we
 # observed on ecoli_trembl_2k. Trade-off: each split point pays ~2*OVERLAP
 # extra residues in the coarse FASTA. Small in practice (~3-8% growth).
-OVERLAP_RESIDUES = 15
+OVERLAP_RESIDUES = 0
 
 
 @dataclass

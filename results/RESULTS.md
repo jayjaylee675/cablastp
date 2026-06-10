@@ -1,8 +1,9 @@
 # HS-CaBLASTP vs CaBLASTP — final benchmark results
 
-Finalized 2026-06-10. Pipeline state: `ABSORB_SHORT_FLANKS=True`, `OVERLAP_RESIDUES=15`
-(commit `37ccdf0`). Benchmark methodology: `scripts/roc_benchmark.py` with the fairness
-fixes (commits `8283a6f`, `a498217`).
+Finalized 2026-06-10. Pipeline state: `ABSORB_SHORT_FLANKS=True`, `OVERLAP_RESIDUES=0`
+(boundary overlap removed — short-flank absorption now provides the boundary-recall
+protection that overlap padding used to, so removing it no longer regresses recall).
+Benchmark methodology: `scripts/roc_benchmark.py` with the fairness fixes.
 
 ## Protocol
 
@@ -20,10 +21,10 @@ fixes (commits `8283a6f`, `a498217`).
 
 | dataset | pipeline | DB size (KB) | search (s) | recall | missed | extra |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| dense_2k   | cablastp    | 1918.1 | 7.1 | 0.9996 | 1 | 0 |
-| dense_2k   | hs-cablastp | **1522.2** (79%) | 6.9 | 0.9978 | 6 | 0 |
-| etrembl_2k | cablastp    | 2467.2 | 5.4 | 1.0000 | 0 | 0 |
-| etrembl_2k | hs-cablastp | 2398.6 (97%) | **3.7** (68%) | 0.9884 | 1 | 0 |
+| dense_2k   | cablastp    | 1918.1 | 7.4 | 0.9996 | 1 | 0 |
+| dense_2k   | hs-cablastp | **1546.7** (81%) | 6.5 | 0.9978 | 6 | 0 |
+| etrembl_2k | cablastp    | 2467.2 | 5.2 | 1.0000 | 0 | 0 |
+| etrembl_2k | hs-cablastp | 2392.3 (97%) | **3.9** (74%) | 0.9884 | 1 | 0 |
 
 Figures: `dense_metrics.png`, `dense_roc.png`, `etrembl_metrics.png`, `etrembl_roc.png`.
 The 3-metric bar chart (`*_metrics.png`) is the headline figure; ROC AUC saturates near 1.0
