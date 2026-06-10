@@ -26,16 +26,24 @@ Benchmark methodology: `scripts/roc_benchmark.py` with the fairness fixes.
 
 ## Headline numbers (`summary.csv`)
 
-| dataset | pipeline | DB size (KB) | search (s, excl. DB load) | recall | missed | extra |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| dense_2k   | cablastp    | 1918.1 | 6.0 ± 0.1 | 0.9996 | 1 | 0 |
-| dense_2k   | hs-cablastp | **1546.7** (81%) | 6.5 ± 0.1 (108%) | 0.9978 | 6 | 0 |
-| etrembl_2k | cablastp    | 2467.2 | 4.1 ± 0.2 | 1.0000 | 0 | 0 |
-| etrembl_2k | hs-cablastp | 2392.3 (97%) | **3.2 ± 0.1** (78%) | 0.9884 | 1 | 0 |
+| dataset | pipeline | DB size (KB) | search (s, excl. DB load) | recall | precision | missed | extra |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| dense_2k   | cablastp    | 1918.1 | 5.9 ± 0.3 | 0.9996 | 1.0000 | 1 | 0 |
+| dense_2k   | hs-cablastp | **1546.7** (81%) | 6.4 ± 0.3 (109%) | 0.9978 | 1.0000 | 6 | 0 |
+| etrembl_2k | cablastp    | 2467.2 | 4.0 ± 0.2 | 1.0000 | 1.0000 | 0 | 0 |
+| etrembl_2k | hs-cablastp | 2392.3 (97%) | **3.3 ± 0.1** (82%) | 0.9884 | 1.0000 | 1 | 0 |
 
 Figures: `dense_metrics.png`, `dense_roc.png`, `etrembl_metrics.png`, `etrembl_roc.png`.
-The 3-metric bar chart (`*_metrics.png`) is the headline figure; ROC AUC saturates near 1.0
-on this self-similar corpus and does not discriminate the pipelines.
+The 4-metric bar chart (`*_metrics.png`: DB size / search time / recall / precision) is the
+headline figure; ROC AUC saturates near 1.0 on this self-similar corpus and does not
+discriminate the pipelines.
+
+**Precision is 1.0 for both pipelines by construction**: the pipeline fine-search e-value
+(1e-3) equals the ground-truth e-value, so neither pipeline reports any hit outside the ground
+truth (extra = 0) — there are no false positives at this threshold. The precision panel
+documents that, rather than separating the pipelines. (To make precision discriminating you
+would relax the pipeline e-value so sub-threshold hits appear and plot a precision-recall
+curve; that pass is intentionally not run here.)
 
 ## What the result says
 

@@ -535,13 +535,19 @@ def main() -> int:
     def _safe_div(a: float, b: float) -> float:
         return a / b if b else 0.0
 
-    # 5b) Headline 3-metric comparison bar chart. This — not the ROC AUC, which
+    # 5b) Headline 4-metric comparison bar chart. This — not the ROC AUC, which
     # saturates near 1.0 on a self-similar corpus — is the figure that actually
     # tells the story: does hs-cablastp give a smaller DB and faster search while
-    # holding recall? Each panel is a 2-bar cablastp-vs-hs comparison.
+    # holding recall and precision? Each panel is a 2-bar cablastp-vs-hs compare.
+    # NOTE: precision = TP / total_hits. At the strict pipeline e-value neither
+    # pipeline reports any hit outside the ground truth (extra = 0), so precision
+    # is 1.0 for both by construction — the panel documents that there are no
+    # false positives at this threshold, not a discriminating difference.
     cab_recall = _safe_div(cab_tp, len(gt_positives))
     hs_recall = _safe_div(hs_tp, len(gt_positives))
-    mfig, maxes = plt.subplots(1, 3, figsize=(12, 4.5))
+    cab_precision = _safe_div(cab_tp, len(cab_scores))
+    hs_precision = _safe_div(hs_tp, len(hs_scores))
+    mfig, maxes = plt.subplots(1, 4, figsize=(16, 4.5))
     # Each panel: (title, cab value, hs value, hint, errs). errs is a (cab, hs)
     # std pair for panels with measurement noise (search time), else None.
     panels = [
@@ -550,6 +556,8 @@ def main() -> int:
          f"lower is better; mean±std of {args.timing_reps} runs",
          (cab_search_std, hs_search_std)),
         ("Recall", cab_recall, hs_recall, "higher is better", None),
+        ("Precision", cab_precision, hs_precision,
+         "higher is better; 1.0 = no extra hits", None),
     ]
     bar_labels = ["cablastp", "hs-cablastp"]
     bar_colors = ["#4C72B0", "#DD8452"]
@@ -564,7 +572,7 @@ def main() -> int:
         top = max(head) if max(head) > 0 else 1.0
         ax.set_ylim(0, top * 1.20)
         for b, v, e in zip(bars, vals, errs or [None, None]):
-            if title == "Recall":
+            if title in ("Recall", "Precision"):
                 txt = f"{v:.4f}"
             elif e is not None:
                 txt = f"{v:.1f}±{e:.1f}"
