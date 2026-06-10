@@ -166,7 +166,16 @@ def parse_tabular_rows(rows: Iterable[List[str]]) -> Dict[Pair, float]:
 def run_cablastp_pipeline(
     query_fasta: Path, db_dir: Path, evalue: float,
 ) -> Dict[Pair, float]:
-    """cablastp-search is a CLI script. We call it and parse tabular output from stdout."""
+    """cablastp-search is a CLI script. We call it and parse tabular output from stdout.
+
+    Note on e-value fairness (#4): we do NOT forward -dbsize here because
+    cablastp-search already pins it internally to the original DB residue count
+    (db.BlastDBSize, accumulated at compress time; e.g. 844535 for dense_2k).
+    hs-cablastp pins the same value via params['orig_db_residues'], and the
+    vanilla-blastp ground truth searches the full FASTA (same natural size). So
+    all three pipelines compute e-values against an identical effective DB length
+    and the 1e-3 gate is equally stringent for each — verified, not assumed.
+    """
     cmd = [
         "cablastp-search", str(db_dir), str(query_fasta), "--quiet",
         "--blast-args", "-outfmt", "6", "-evalue", str(evalue),
@@ -271,6 +280,13 @@ def main() -> int:
     ap.add_argument("--label", default=None,
                     help="Dataset label written into the CSVs (defaults to "
                          "the fasta filename).")
+    ap.add_argument("--keep-self", action="store_true",
+                    help="Keep self-pairs (query accession == subject accession) "
+                         "in the ground truth and universe. By default they are "
+                         "excluded: queries are sampled FROM the dataset, so every "
+                         "query trivially matches itself at 100%% identity, which "
+                         "inflates recall/AUC identically for both pipelines and "
+                         "hides their real difference (#2 fairness fix).")
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -284,13 +300,23 @@ def main() -> int:
     query_ids: Set[str] = {q[0] for q in queries}
     subjects: List[str] = [r[0] for r in records]
     subject_set: Set[str] = set(subjects)
+    # Original uncompressed DB length. All three pipelines compute e-values
+    # against this same effective size (#4): the ground truth searches the full
+    # FASTA naturally, cablastp-search pins db.BlastDBSize internally, and
+    # hs-cablastp pins params['orig_db_residues']. We compute it here only to
+    # report it, so the fairness of the 1e-3 gate is visible in the run log.
+    orig_residues = sum(len(seq) for _, seq in records)
+    print(f"      original DB residues (e-value -dbsize for all 3): {orig_residues}")
 
     queries_path = args.out / "queries.fasta"
     write_fasta(queries_path, queries)
     print(f"[1/5] sampled {len(queries)} queries -> {queries_path}")
 
     # 2) Ground truth: vanilla blastp.
-    raw_db = args.out / "raw_blast_db"
+    # Name the raw GT db per source FASTA so switching --fasta never silently
+    # reuses a stale ground-truth db built from a different dataset (#1). The old
+    # fixed name "raw_blast_db" was the cause of cross-dataset contamination.
+    raw_db = args.out / f"raw_blast_db_{args.fasta.stem}"
     ensure_raw_blastdb(args.fasta, raw_db, args.makeblastdb)
     t = time.perf_counter()
     gt_rows = run_blastp_tabular(args.blastp, queries_path, raw_db,
@@ -301,7 +327,8 @@ def main() -> int:
           f"{len(gt_positives)} unique positive pairs "
           f"({time.perf_counter() - t:.1f}s)")
 
-    # 3) Run cablastp.
+    # 3) Run cablastp (e-values already pinned to the original DB size inside
+    # cablastp-search; see run_cablastp_pipeline docstring, #4).
     t = time.perf_counter()
     cab_scores = run_cablastp_pipeline(
         queries_path, args.cab_db, args.pipeline_evalue,
@@ -326,6 +353,23 @@ def main() -> int:
         (_extract_accession(q), _extract_accession(s))
         for q in query_ids for s in subject_set
     }
+
+    # Exclude trivial self-pairs unless explicitly kept (#2). A query sampled
+    # from the dataset always matches itself; counting that as a recovered
+    # positive inflates recall/AUC equally for both pipelines and masks the real
+    # gap. Drop q==s from the universe AND every score/positive set so the
+    # downstream ROC, recall, missed, and extra counts are all self-free.
+    if not args.keep_self:
+        def _drop_self(d):
+            return {k: v for k, v in d.items() if k[0] != k[1]}
+        n_self_gt = sum(1 for q, s in gt_positives if q == s)
+        universe = {(q, s) for (q, s) in universe if q != s}
+        gt_scores = _drop_self(gt_scores)
+        cab_scores = _drop_self(cab_scores)
+        hs_scores = _drop_self(hs_scores)
+        gt_positives = set(gt_scores.keys())
+        print(f"      excluded {n_self_gt} self-pairs from ground truth "
+              f"(use --keep-self to retain)")
 
     # 5) Missed-hit report + ROC.
     cab_missed = sorted(gt_positives - set(cab_scores.keys()))
@@ -412,6 +456,47 @@ def main() -> int:
 
     def _safe_div(a: float, b: float) -> float:
         return a / b if b else 0.0
+
+    # 5b) Headline 3-metric comparison bar chart. This — not the ROC AUC, which
+    # saturates near 1.0 on a self-similar corpus — is the figure that actually
+    # tells the story: does hs-cablastp give a smaller DB and faster search while
+    # holding recall? Each panel is a 2-bar cablastp-vs-hs comparison.
+    cab_recall = _safe_div(cab_tp, len(gt_positives))
+    hs_recall = _safe_div(hs_tp, len(gt_positives))
+    mfig, maxes = plt.subplots(1, 3, figsize=(12, 4.5))
+    panels = [
+        ("DB size (KB)", cab_db_kb, hs_db_kb, "lower is better"),
+        ("Search time (s)", cab_search_seconds, hs_search_seconds, "lower is better"),
+        ("Recall", cab_recall, hs_recall, "higher is better"),
+    ]
+    bar_labels = ["cablastp", "hs-cablastp"]
+    bar_colors = ["#4C72B0", "#DD8452"]
+    for ax, (title, cval, hval, hint) in zip(maxes, panels):
+        vals = [cval, hval]
+        bars = ax.bar(bar_labels, vals, color=bar_colors, width=0.6)
+        ax.set_title(f"{title}\n({hint})", fontsize=10)
+        ax.grid(True, axis="y", alpha=0.3)
+        top = max(vals) if max(vals) > 0 else 1.0
+        ax.set_ylim(0, top * 1.18)
+        for b, v in zip(bars, vals):
+            txt = f"{v:.4f}" if title == "Recall" else f"{v:.1f}"
+            ax.text(b.get_x() + b.get_width() / 2, v + top * 0.02, txt,
+                    ha="center", va="bottom", fontsize=9)
+    # Annotate the hs/cab ratio for the two "lower is better" panels.
+    for ax, (title, cval, hval, _hint) in list(zip(maxes, panels))[:2]:
+        if cval > 0:
+            ax.text(0.5, 0.93, f"hs = {hval / cval * 100:.0f}% of cab",
+                    transform=ax.transAxes, ha="center", fontsize=8.5,
+                    color="#555")
+    mfig.suptitle(
+        f"hs-cablastp vs cablastp: {args.fasta.name} "
+        f"({args.n_queries} queries, self-pairs "
+        f"{'kept' if args.keep_self else 'excluded'})", fontsize=11,
+    )
+    mfig.tight_layout()
+    metrics_png = args.out / "metrics.png"
+    mfig.savefig(metrics_png, dpi=130)
+    print(f"      saved metrics bar chart to {metrics_png}")
 
     summary_rows = [
         {
