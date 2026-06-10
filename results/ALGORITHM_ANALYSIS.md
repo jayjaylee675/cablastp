@@ -134,8 +134,29 @@ The fine BLAST cost scales with the number of sequences written into the fine DB
 
 This is also why the earlier (unfair) measurement made hs look uniformly faster: it
 included cablastp's one-time multi-file DB open (~0.5 s) and let cablastp use a laxer
-coarse e-value. Removing both confounds exposes Force B, which genuinely hurts hs on
-redundant data.
+coarse e-value. Removing both confounds exposes Force B, which genuinely hurt hs on
+redundant data — until it was fixed (next section).
+
+### Force B, resolved — align-once / report-all
+
+Force B is not fundamental; it is wasted work. The dense candidate explosion is not
+genuine redundancy that compression failed to remove — measured on the dense candidate
+set, **210 / 210** groups of identical-reconstruction candidates are *distinct
+accessions* (different strain proteins with byte-identical sequences); **zero** are the
+same subject stored twice. Compression already collapsed their *storage* (the duplicate
+copies are 0-byte, empty-diff children — which is why the DB is small); what remains is
+many distinct subjects that happen to share a sequence, plus a parent and its empty-diff
+children all reconstructing to the same string.
+
+Re-aligning each identical copy in the fine BLAST is pure waste: BLAST returns an
+identical HSP for an identical subject sequence. So `search.py` now writes each *unique*
+reconstructed sequence into the fine DB once and, after the search, copies every HSP on
+that representative to every node sharing its sequence (each keeps its own accession).
+This is **recall-safe by construction**. On dense it shrinks the fine set 2623 → ~1606
+(−31%) and flips the dense search from *slower* to **faster than cablastp** (≈94% of its
+time), while recall stays at the lossless baseline. The deep forest is no longer its own
+enemy at search time — the tree's own knowledge that those nodes are identical (empty
+net diff) is finally exploited instead of discarded.
 
 ---
 
@@ -163,19 +184,22 @@ redundant data.
             → search SLOWER         → search FASTER
 ```
 
-**DB size and search speed are driven by the same lever (forest depth) in opposite
-directions.** Redundant data is exactly where hs-cablastp compresses best *and*
-searches worst, because both effects are caused by the same thing: many near-identical
-sequences collapsing into deep subtrees.
+**DB size and search speed are driven by the same lever (forest depth).** Redundant data
+is where hs-cablastp compresses best; *naively* it would also search worst there (more
+candidates), because both effects come from many near-identical sequences collapsing into
+deep subtrees. The align-once/report-all dedup breaks that coupling on the search side:
+the duplicate candidates are aligned once, so the deep forest keeps its DB-size win
+*without* paying for it in fine-search time.
 
 ## 6. Practical implications
 
 - hs-cablastp's clear, robust advantage is **DB size on redundant databases** (strain
   collections, clustered families). The more redundant the corpus, the bigger the
   compression win.
-- Its search is **not** algorithmically faster in general; it is a data-dependent
-  trade-off (slower on redundant, faster on divergent data).
-- The obvious lever to fix the dense-search penalty is to **shrink the fine-candidate
-  set without losing recall** — e.g. deduplicate identical reconstructions before the
-  fine BLAST, or cap/merge near-identical nodes in a hit subtree. That attacks Force B
-  directly while leaving the DB-size win intact.
+- With align-once/report-all dedup, its **search is also faster than cablastp on both the
+  redundant and the divergent set** in the algorithm-only measurement (dense ≈94%, etrembl
+  ≈78% of cablastp's time), at the lossless-baseline recall.
+- The remaining lever is **further reducing fine candidates without losing recall** — e.g.
+  collapsing exact-duplicate subjects into a single multi-ref *node* at compression time
+  (so they never become separate candidates), or partial-region HSP inheritance for
+  children that differ from a parent only outside the hit window.

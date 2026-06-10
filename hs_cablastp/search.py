@@ -230,26 +230,47 @@ def search(
         print(f"candidates after pruning: {len(candidates)}")
 
     # --- Phase 3 Step 1: reconstruct candidate sequences ---
+    # Align-once / report-all. Many candidates reconstruct to the *same* residue
+    # string: different strain proteins (distinct accessions) that are byte-
+    # identical, or a parent and an empty-diff child. The forest already encodes
+    # this (a child whose diff_script makes no net change over the hit region is,
+    # there, identical to its parent), so re-aligning each copy is wasted work —
+    # BLAST returns an identical HSP for an identical subject sequence. We
+    # therefore put each *unique* reconstructed sequence into the fine DB once (a
+    # "representative") and, after the fine search, copy every HSP on that
+    # representative to every node that shares its sequence, each keeping its own
+    # ref_original_seq. This shrinks the fine BLAST with zero recall loss: the
+    # inherited hit is bit-for-bit what re-aligning the duplicate would have given.
     tmp_dir = Path(tempfile.mkdtemp(prefix="hs_fine_"))
     try:
         fine_fasta = tmp_dir / "fine.fasta"
-        node_ref: Dict[int, str] = {}
+        seq_to_rep: Dict[str, int] = {}                       # sequence -> representative node id
+        rep_members: Dict[int, List[Tuple[int, str]]] = {}    # rep id -> [(node_id, ref), ...]
         with open(fine_fasta, "w", encoding="ascii") as fh:
             for cand in candidates.values():
                 seq = reconstruct_sequence(db, cand.node_id)
                 if not seq:
                     continue
-                node = db.forest[cand.node_id]
-                ref = node.ref_original_seq
-                node_ref[cand.node_id] = ref
-                fh.write(f">node_{cand.node_id} {ref}\n")
-                for i in range(0, len(seq), 60):
-                    fh.write(seq[i:i + 60] + "\n")
+                ref = db.forest[cand.node_id].ref_original_seq
+                rep = seq_to_rep.get(seq)
+                if rep is None:
+                    # First node carrying this exact sequence: it is the copy that
+                    # actually goes into the fine BLAST DB.
+                    seq_to_rep[seq] = cand.node_id
+                    rep_members[cand.node_id] = [(cand.node_id, ref)]
+                    fh.write(f">node_{cand.node_id} {ref}\n")
+                    for i in range(0, len(seq), 60):
+                        fh.write(seq[i:i + 60] + "\n")
+                else:
+                    # Identical sequence already queued: this subject will inherit
+                    # the representative's HSPs rather than be re-aligned.
+                    rep_members[rep].append((cand.node_id, ref))
 
         if fine_fasta.stat().st_size == 0:
             return {
                 "coarse_hits": len(coarse_rows),
                 "candidates": 0,
+                "unique_candidates": 0,
                 "fine_hits": [],
                 "matched_roots": len(matched_root_ids),
                 "load_seconds": _t_loaded - _t0,
@@ -279,22 +300,33 @@ def search(
             sseqid = row[1]
             if not sseqid.startswith("node_"):
                 continue
-            node_id = int(sseqid.split("_", 1)[1])
-            fine_hits.append(SearchHit(
-                node_id=node_id,
-                fasta_ref=node_ref.get(node_id, ""),
-                qseqid=row[0],
-                pident=float(row[2]),
-                length=int(row[3]),
-                qstart=int(row[6]), qend=int(row[7]),
-                sstart=int(row[8]), send=int(row[9]),
-                evalue=float(row[10]), bitscore=float(row[11]),
-            ))
+            rep_id = int(sseqid.split("_", 1)[1])
+            # Fan this HSP out to every subject that shares the representative's
+            # sequence. The alignment stats are identical by construction (same
+            # subject residues), so they are copied verbatim; only node_id and the
+            # source ref differ per member.
+            members = rep_members.get(rep_id, [(rep_id, "")])
+            pident = float(row[2]); length = int(row[3])
+            qstart = int(row[6]); qend = int(row[7])
+            sstart = int(row[8]); send = int(row[9])
+            evalue = float(row[10]); bitscore = float(row[11])
+            for node_id, ref in members:
+                fine_hits.append(SearchHit(
+                    node_id=node_id,
+                    fasta_ref=ref,
+                    qseqid=row[0],
+                    pident=pident,
+                    length=length,
+                    qstart=qstart, qend=qend,
+                    sstart=sstart, send=send,
+                    evalue=evalue, bitscore=bitscore,
+                ))
 
         return {
             "coarse_hits": len(coarse_rows),
             "matched_roots": len(matched_root_ids),
             "candidates": len(candidates),
+            "unique_candidates": len(seq_to_rep),
             "fine_hits": fine_hits,
             "load_seconds": _t_loaded - _t0,
             "search_seconds": time.perf_counter() - _t_loaded,

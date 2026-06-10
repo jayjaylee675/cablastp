@@ -23,38 +23,38 @@ Benchmark methodology: `scripts/roc_benchmark.py` with the fairness fixes.
     pickle in ~0.03 s; cablastp opens several index files in ~0.5 s — structural, not
     algorithmic). Interpreter startup is excluded for the same reason.
   - reported as **mean ± std over 5 runs** (BLAST scheduling is noisy).
-  - hs-cablastp **tree-pruning threshold = 0.53** (search.py library default is 0.3). 0.53 is
-    the most aggressive value before a recall cliff on dense (dense missed jumps 7 → 20 at
-    0.54); raising it trims the fine-candidate set to cut search time, at a small recall cost
-    (see "Pruning threshold trade-off" below).
+  - hs-cablastp tree-pruning threshold = **0.3** (the library default).
+  - **fine-candidate dedup (align-once / report-all)** is on (see below): identical reconstructed
+    candidates are aligned once and the hit is fanned out to every subject sharing that sequence.
 
 ## Headline numbers (`summary.csv`)
 
 | dataset | pipeline | DB size (KB) | search (s, excl. DB load) | recall | precision | missed | extra |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| dense_2k   | cablastp    | 1918.1 | 5.8 ± 0.2 | 0.9996 | 1.0000 | 1 | 0 |
-| dense_2k   | hs-cablastp | **1546.7** (81%) | 6.1 ± 0.3 (104%) | 0.9975 | 1.0000 | 7 | 0 |
+| dense_2k   | cablastp    | 1918.1 | 5.9 ± 0.2 | 0.9996 | 1.0000 | 1 | 0 |
+| dense_2k   | hs-cablastp | **1546.7** (81%) | **5.6 ± 0.2** (94%) | 0.9978 | 1.0000 | 6 | 0 |
 | etrembl_2k | cablastp    | 2467.2 | 4.0 ± 0.2 | 1.0000 | 1.0000 | 0 | 0 |
-| etrembl_2k | hs-cablastp | 2392.3 (97%) | **2.9 ± 0.2** (73%) | 0.9651 | 1.0000 | 3 | 0 |
+| etrembl_2k | hs-cablastp | 2392.3 (97%) | **3.1 ± 0.2** (78%) | 0.9884 | 1.0000 | 1 | 0 |
 
-### Pruning threshold trade-off (`--prune-threshold`)
+### Fine-candidate dedup (align-once / report-all)
 
-Raising the tree-pruning threshold drops more of each hit subtree before the fine BLAST,
-shrinking the fine-candidate set and the search time, at the cost of recall. Measured on
-dense_2k (50 queries):
+On redundant data many surviving candidates reconstruct to the **same** residue string —
+different strain proteins (distinct accessions) that are byte-identical, or a parent and an
+empty-diff child. They are *not* a compression failure (those duplicates are stored as 0-byte
+diff-scripts, which is why the DB is small) and they cannot be dropped (each is a distinct
+subject that a query must be able to find). But re-aligning each identical copy in the fine
+BLAST is wasted work: BLAST returns an identical HSP for an identical subject sequence.
 
-| threshold | dense search | dense missed | etrembl missed |
-| ---: | ---: | ---: | ---: |
-| 0.30 (library default) | 6.2 s | 6 | 1 |
-| 0.50 | 6.3 s | 6 | 2 |
-| **0.53 (chosen)** | **5.7 s** | **7** | 3 |
-| 0.54 | 5.6 s | **20 (cliff)** | 3 |
-| 0.70 | 5.5 s | 223 | 4 |
+`search.py` therefore writes each *unique* reconstructed sequence into the fine BLAST DB once
+and, after the search, copies every HSP on that representative to every node sharing its
+sequence (each keeps its own `ref_original_seq`). This is **recall-safe by construction** — the
+inherited hit is bit-for-bit what re-aligning the duplicate would produce. On dense_2k it cuts
+the fine-search set from 2325 to 1606 candidates (−31%) and is what makes hs-cablastp's dense
+search *faster* than cablastp rather than slower.
 
-0.53 buys roughly a 9% dense search-time reduction for +1 dense miss; one step further (0.54)
-collapses dense recall. etrembl recall degrades for any value above 0.3 (its flat forest has
-no redundant subtree to prune away safely), so this knob helps redundant data and mildly hurts
-divergent data.
+Because dedup removes the candidate redundancy losslessly, the earlier workaround of raising
+`--prune-threshold` (which trimmed candidates at a recall cost — and hit a recall cliff on dense
+at 0.54: 7→20 missed) is **no longer needed**; the threshold is back at the recall-safe 0.3.
 
 Figures: `dense_metrics.png`, `dense_roc.png`, `etrembl_metrics.png`, `etrembl_roc.png`.
 The 4-metric bar chart (`*_metrics.png`: DB size / search time / recall / precision) is the
@@ -71,17 +71,18 @@ curve; that pass is intentionally not run here.)
 ## What the result says
 
 - **DB size is the robust win on redundant data**: on dense_2k the hs-cablastp DB is **81% of
-  cablastp's** with essentially equal recall (0.9975 vs 0.9996). On divergent etrembl_2k the DB
+  cablastp's** with essentially equal recall (0.9978 vs 0.9996). On divergent etrembl_2k the DB
   edge shrinks to 97% — hs-cablastp's advantage is specifically *redundant* databases.
-- **Search time is a data-dependent trade-off, not a uniform hs win.** Under the algorithm-only
-  measurement (DB-load excluded, equal coarse e-value, pruning 0.53), hs-cablastp is **about tied
-  on dense** (6.1 vs 5.8 s, +4%; error bars overlap) and **faster on etrembl** (2.9 vs 4.0 s,
-  −27%). Pruning at 0.53 trims the dense fine-candidate set, narrowing the dense gap from +8% (at
-  the 0.3 library default) to +4%. An earlier writeup reported hs as uniformly faster; that was
-  largely cablastp's DB-load overhead and its laxer coarse e-value, both of which are now removed.
-- **Recall is held but slightly below cablastp**, and the 0.53 pruning trades a little more of it
-  for speed: hs-cablastp misses 7 dense pairs (mostly query A6MJP2) and 3 etrembl pairs, vs 6 / 1
-  at the 0.3 default. These are hierarchical-fragmentation misses, not an e-value artifact.
+- **Search is now faster on both sets** under the algorithm-only measurement (DB-load excluded,
+  equal coarse e-value): dense **5.6 vs 5.9 s (94%)** and etrembl **3.1 vs 4.0 s (78%)**. The
+  align-once/report-all dedup removed the dense penalty: hs-cablastp previously paid for
+  re-aligning many byte-identical strain candidates, and now aligns each unique sequence once.
+  (An even earlier writeup over-credited hs's speed because it also included cablastp's DB-load
+  overhead; that is excluded here, so this is the conservative, fair number.)
+- **Recall is held, just below cablastp**: hs-cablastp misses 6 dense pairs (all on query
+  A6MJP2) and 1 etrembl pair. These are hierarchical-fragmentation misses (a subject split across
+  forest nodes so no single node carries the full-length HSP), not an e-value artifact, and the
+  dedup does not affect them (it is lossless).
 
 ## Known limitations / next step
 

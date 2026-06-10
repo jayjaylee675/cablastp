@@ -362,14 +362,14 @@ def main() -> int:
                          "is 1e-3; forcing them equal removes a confound where one "
                          "pipeline casts a wider coarse net and so does more/less "
                          "fine-search work (search-time fairness).")
-    ap.add_argument("--prune-threshold", type=float, default=0.53,
+    ap.add_argument("--prune-threshold", type=float, default=0.3,
                     help="hs-cablastp tree-pruning threshold in [0,1] (default "
-                         "0.53). Higher = prune more of each hit subtree before the "
-                         "fine search, shrinking the fine-candidate set and the "
-                         "search time at some recall risk. 0.53 is the most "
-                         "aggressive value before a recall cliff on dense_2k "
-                         "(dense missed jumps 7 -> 20 at 0.54). search.py's library "
-                         "default stays 0.3.")
+                         "0.3, the library default). Higher prunes more of each hit "
+                         "subtree at a recall cost. NOTE: since search.py now "
+                         "deduplicates identical reconstructed candidates before "
+                         "the fine BLAST (align-once/report-all), the candidate "
+                         "explosion is handled losslessly there, so raising this "
+                         "(which trades recall for speed) is no longer needed.")
     ap.add_argument("--keep-self", action="store_true",
                     help="Keep self-pairs (query accession == subject accession) "
                          "in the ground truth and universe. By default they are "
