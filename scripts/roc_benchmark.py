@@ -163,85 +163,114 @@ def parse_tabular_rows(rows: Iterable[List[str]]) -> Dict[Pair, float]:
 # -------------------- Pipeline runners --------------------
 
 
+# Both pipelines run IN-PROCESS and are timed with the one-time DB load/open
+# EXCLUDED, so the reported search time reflects algorithm cost rather than a
+# storage-format artifact: hs-cablastp deserializes one pickle (~0.03s) while
+# cablastp opens several index files (~0.5s) — a structural difference, not an
+# algorithmic one. Interpreter startup / import are likewise excluded (both are
+# Python; that cost is identical and not algorithmic). The two pipelines are
+# also driven with the SAME coarse e-value (see --coarse-evalue) so neither
+# casts a wider coarse net than the other.
+
+
 def run_cablastp_pipeline(
-    query_fasta: Path, db_dir: Path, evalue: float,
-) -> Dict[Pair, float]:
-    """cablastp-search is a CLI script. We call it and parse tabular output from stdout.
+    query_fasta: Path, db_dir: Path, fine_evalue: float, coarse_evalue: float,
+) -> Tuple[float, Dict[Pair, float]]:
+    """Run cablastp's search phases in-process; return (search_seconds, hits).
 
-    Note on e-value fairness (#4): we do NOT forward -dbsize here because
-    cablastp-search already pins it internally to the original DB residue count
-    (db.BlastDBSize, accumulated at compress time; e.g. 844535 for dense_2k).
-    hs-cablastp pins the same value via params['orig_db_residues'], and the
-    vanilla-blastp ground truth searches the full FASTA (same natural size). So
-    all three pipelines compute e-values against an identical effective DB length
-    and the 1e-3 gate is equally stringent for each — verified, not assumed.
+    new_read_db (the multi-file DB open) runs before the timer starts, so the
+    timed region is the actual search work: coarse BLAST + hit decompression +
+    fine DB build + fine BLAST. -dbsize is pinned to db.BlastDBSize, same as the
+    cablastp-search CLI and as hs-cablastp / the ground truth.
     """
-    cmd = [
-        "cablastp-search", str(db_dir), str(query_fasta), "--quiet",
-        "--blast-args", "-outfmt", "6", "-evalue", str(evalue),
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"cablastp-search failed (exit {proc.returncode}):\n{proc.stderr}"
-        )
-    rows = [ln.split("\t") for ln in proc.stdout.splitlines() if ln.strip()]
-    return parse_tabular_rows(rows)
+    import types
+    from cablastp.db import new_read_db, FILE_BLAST_FINE
+    from cablastp.commands import search as _cab
+    from cablastp.commands._search_common import (
+        expand_blast_hits, make_fine_blast_db, read_input_fasta, write_fasta,
+    )
 
-
-# Inline runner used to time hs-cablastp as a COLD subprocess, symmetric to the
-# cablastp-search console script. It pays the same Python-interpreter startup +
-# package import cost, then prints full untruncated tabular (qseqid, fasta_ref,
-# bitscore) for every fine hit. The shipped hs-cablastp-search CLI is unusable
-# for this: it caps output at 50 hits, truncates fasta_ref to 22 chars, and never
-# prints qseqid — so we drive search() directly through this small emitter.
-_HS_SUBPROCESS_RUNNER = (
-    "import sys, pathlib;"
-    "from hs_cablastp.search import search;"
-    "r = search(pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]),"
-    " fine_evalue=float(sys.argv[3]));"
-    "[print(h.qseqid + chr(9) + h.fasta_ref + chr(9) + repr(h.bitscore))"
-    " for h in r['fine_hits']]"
-)
+    args = types.SimpleNamespace(
+        blastp="blastp", makeblastdb="makeblastdb",
+        coarse_eval=coarse_evalue, num_workers=os.cpu_count() or 1,
+    )
+    query_bytes = read_input_fasta(str(query_fasta))
+    db = new_read_db(str(db_dir))                       # EXCLUDED from timing
+    t0 = time.perf_counter()
+    try:
+        coarse_xml = _cab._blast_coarse(args, db, query_bytes)
+        expanded = expand_blast_hits(db, coarse_xml, args.coarse_eval)
+        fasta_bytes = write_fasta(expanded)
+        tmp_dir = make_fine_blast_db(args.makeblastdb, fasta_bytes, FILE_BLAST_FINE)
+        try:
+            proc = subprocess.run(
+                ["blastp", "-db", os.path.join(tmp_dir, FILE_BLAST_FINE),
+                 "-dbsize", str(db.BlastDBSize),
+                 "-num_threads", str(args.num_workers),
+                 "-outfmt", f"6 {_TAB_COLS}", "-evalue", str(fine_evalue)],
+                input=query_bytes, capture_output=True,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "cablastp fine blastp failed:\n"
+                    + proc.stderr.decode("utf-8", "replace")
+                )
+            stdout = proc.stdout.decode("ascii", "replace")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    finally:
+        db.read_close()
+    search_seconds = time.perf_counter() - t0
+    rows = [ln.split("\t") for ln in stdout.splitlines() if ln.strip()]
+    return search_seconds, parse_tabular_rows(rows)
 
 
 def run_hs_cablastp_pipeline(
-    query_fasta: Path, db_dir: Path, fine_evalue: float, in_process: bool = False,
-) -> Dict[Pair, float]:
-    """Map hs-cablastp fine hits to {(q_acc, s_acc): best_bitscore}.
+    query_fasta: Path, db_dir: Path, fine_evalue: float, coarse_evalue: float,
+) -> Tuple[float, Dict[Pair, float]]:
+    """Run hs-cablastp search in-process; return (search_seconds, hits).
 
-    Timing fairness (#5): by default we run hs-cablastp as a *cold subprocess*
-    (a fresh Python process that imports the package and calls search()), exactly
-    like cablastp-search is run, so both pipelines pay an identical interpreter-
-    startup + import cost. An earlier revision called search() in-process, which
-    silently handed hs-cablastp a ~0.24s head start over cablastp's subprocess.
-    Pass in_process=True to restore the old (unfair, faster) in-process path.
+    search() reports search_seconds with forest deserialization (load_db)
+    already subtracted, so the timer excludes the same DB-load overhead excluded
+    for cablastp, and uses the same coarse e-value.
     """
+    result = hs_search(
+        query_fasta, db_dir,
+        coarse_evalue=coarse_evalue, fine_evalue=fine_evalue,
+    )
     best: Dict[Pair, float] = {}
-    if in_process:
-        result = hs_search(query_fasta, db_dir, fine_evalue=fine_evalue)
-        pairs = (((h.qseqid, h.fasta_ref), h.bitscore) for h in result["fine_hits"])
-    else:
-        proc = subprocess.run(
-            [sys.executable, "-c", _HS_SUBPROCESS_RUNNER,
-             str(query_fasta), str(db_dir), str(fine_evalue)],
-            capture_output=True, text=True,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"hs-cablastp subprocess failed (exit {proc.returncode}):\n"
-                f"{proc.stderr}"
-            )
-        rows = [ln.split("\t") for ln in proc.stdout.splitlines() if ln.strip()]
-        pairs = (((r[0], r[1]), float(r[2])) for r in rows if len(r) == 3)
-    for (qseqid, fasta_ref), bitscore in pairs:
-        acc = _extract_accession(fasta_ref)
+    for h in result["fine_hits"]:
+        acc = _extract_accession(h.fasta_ref)
         if not acc:
             continue
-        key = (_extract_accession(qseqid), acc)
-        if key not in best or bitscore > best[key]:
-            best[key] = bitscore
-    return best
+        key = (_extract_accession(h.qseqid), acc)
+        if key not in best or h.bitscore > best[key]:
+            best[key] = h.bitscore
+    return float(result["search_seconds"]), best
+
+
+def mean_search_time(
+    run_fn, *fn_args, reps: int
+) -> Tuple[float, float, Dict[Pair, float]]:
+    """Run a pipeline `reps` times; return (mean search_seconds, std, hits).
+
+    Search timing is noisy (BLAST subprocess scheduling), so the single-run
+    number is not robust. The hit set is deterministic across reps, so we keep
+    the first run's hits and report the mean ± sample std of the per-run search
+    times (std = 0.0 for a single rep).
+    """
+    import statistics
+
+    times: List[float] = []
+    hits: Dict[Pair, float] = {}
+    for i in range(max(1, reps)):
+        secs, h = run_fn(*fn_args)
+        times.append(secs)
+        if i == 0:
+            hits = h
+    mean = statistics.mean(times)
+    std = statistics.stdev(times) if len(times) > 1 else 0.0
+    return mean, std, hits
 
 
 # -------------------- ROC --------------------
@@ -319,6 +348,16 @@ def main() -> int:
     ap.add_argument("--label", default=None,
                     help="Dataset label written into the CSVs (defaults to "
                          "the fasta filename).")
+    ap.add_argument("--timing-reps", type=int, default=3,
+                    help="Run each pipeline's search this many times and report "
+                         "the median search time (BLAST timing is noisy; default 3). "
+                         "Hits are deterministic, so only timing repeats.")
+    ap.add_argument("--coarse-evalue", type=float, default=1e-3,
+                    help="Coarse-search E-value used by BOTH pipelines (default "
+                         "1e-3). cablastp's native default is 5.0 and hs-cablastp's "
+                         "is 1e-3; forcing them equal removes a confound where one "
+                         "pipeline casts a wider coarse net and so does more/less "
+                         "fine-search work (search-time fairness).")
     ap.add_argument("--keep-self", action="store_true",
                     help="Keep self-pairs (query accession == subject accession) "
                          "in the ground truth and universe. By default they are "
@@ -366,24 +405,24 @@ def main() -> int:
           f"{len(gt_positives)} unique positive pairs "
           f"({time.perf_counter() - t:.1f}s)")
 
-    # 3) Run cablastp (e-values already pinned to the original DB size inside
-    # cablastp-search; see run_cablastp_pipeline docstring, #4).
-    t = time.perf_counter()
-    cab_scores = run_cablastp_pipeline(
-        queries_path, args.cab_db, args.pipeline_evalue,
+    # 3) Run cablastp. search_seconds excludes DB open and uses --coarse-evalue;
+    # reported as the mean +/- std over --timing-reps runs.
+    cab_search_seconds, cab_search_std, cab_scores = mean_search_time(
+        run_cablastp_pipeline,
+        queries_path, args.cab_db, args.pipeline_evalue, args.coarse_evalue,
+        reps=args.timing_reps,
     )
-    cab_search_seconds = time.perf_counter() - t
     print(f"[3/5] cablastp: {len(cab_scores)} unique hit pairs "
-          f"({cab_search_seconds:.1f}s)")
+          f"({cab_search_seconds:.2f}+/-{cab_search_std:.2f}s search, excl. DB load)")
 
-    # 4) Run hs-cablastp.
-    t = time.perf_counter()
-    hs_scores = run_hs_cablastp_pipeline(
-        queries_path, args.hs_db, args.pipeline_evalue,
+    # 4) Run hs-cablastp. Same timing basis (search excl. DB load) and coarse e-value.
+    hs_search_seconds, hs_search_std, hs_scores = mean_search_time(
+        run_hs_cablastp_pipeline,
+        queries_path, args.hs_db, args.pipeline_evalue, args.coarse_evalue,
+        reps=args.timing_reps,
     )
-    hs_search_seconds = time.perf_counter() - t
     print(f"[4/5] hs-cablastp: {len(hs_scores)} unique hit pairs "
-          f"({hs_search_seconds:.1f}s)")
+          f"({hs_search_seconds:.2f}+/-{hs_search_std:.2f}s search, excl. DB load)")
 
     # Constrain universe to (sampled queries) x (all subjects in fasta).
     # Keys here must match the accession form used by gt_scores / cab_scores /
@@ -503,26 +542,38 @@ def main() -> int:
     cab_recall = _safe_div(cab_tp, len(gt_positives))
     hs_recall = _safe_div(hs_tp, len(gt_positives))
     mfig, maxes = plt.subplots(1, 3, figsize=(12, 4.5))
+    # Each panel: (title, cab value, hs value, hint, errs). errs is a (cab, hs)
+    # std pair for panels with measurement noise (search time), else None.
     panels = [
-        ("DB size (KB)", cab_db_kb, hs_db_kb, "lower is better"),
-        ("Search time (s)", cab_search_seconds, hs_search_seconds, "lower is better"),
-        ("Recall", cab_recall, hs_recall, "higher is better"),
+        ("DB size (KB)", cab_db_kb, hs_db_kb, "lower is better", None),
+        ("Search time (s, excl. DB load)", cab_search_seconds, hs_search_seconds,
+         f"lower is better; mean±std of {args.timing_reps} runs",
+         (cab_search_std, hs_search_std)),
+        ("Recall", cab_recall, hs_recall, "higher is better", None),
     ]
     bar_labels = ["cablastp", "hs-cablastp"]
     bar_colors = ["#4C72B0", "#DD8452"]
-    for ax, (title, cval, hval, hint) in zip(maxes, panels):
+    for ax, (title, cval, hval, hint, errs) in zip(maxes, panels):
         vals = [cval, hval]
-        bars = ax.bar(bar_labels, vals, color=bar_colors, width=0.6)
+        yerr = list(errs) if errs else None
+        bars = ax.bar(bar_labels, vals, color=bar_colors, width=0.6,
+                      yerr=yerr, capsize=6, ecolor="#333")
         ax.set_title(f"{title}\n({hint})", fontsize=10)
         ax.grid(True, axis="y", alpha=0.3)
-        top = max(vals) if max(vals) > 0 else 1.0
-        ax.set_ylim(0, top * 1.18)
-        for b, v in zip(bars, vals):
-            txt = f"{v:.4f}" if title == "Recall" else f"{v:.1f}"
-            ax.text(b.get_x() + b.get_width() / 2, v + top * 0.02, txt,
-                    ha="center", va="bottom", fontsize=9)
+        head = [v + (e or 0.0) for v, e in zip(vals, errs or [0.0, 0.0])]
+        top = max(head) if max(head) > 0 else 1.0
+        ax.set_ylim(0, top * 1.20)
+        for b, v, e in zip(bars, vals, errs or [None, None]):
+            if title == "Recall":
+                txt = f"{v:.4f}"
+            elif e is not None:
+                txt = f"{v:.1f}±{e:.1f}"
+            else:
+                txt = f"{v:.1f}"
+            ax.text(b.get_x() + b.get_width() / 2, v + (e or 0.0) + top * 0.02,
+                    txt, ha="center", va="bottom", fontsize=9)
     # Annotate the hs/cab ratio for the two "lower is better" panels.
-    for ax, (title, cval, hval, _hint) in list(zip(maxes, panels))[:2]:
+    for ax, (title, cval, hval, _hint, _errs) in list(zip(maxes, panels))[:2]:
         if cval > 0:
             ax.text(0.5, 0.93, f"hs = {hval / cval * 100:.0f}% of cab",
                     transform=ax.transAxes, ha="center", fontsize=8.5,
@@ -530,7 +581,9 @@ def main() -> int:
     mfig.suptitle(
         f"hs-cablastp vs cablastp: {args.fasta.name} "
         f"({args.n_queries} queries, self-pairs "
-        f"{'kept' if args.keep_self else 'excluded'})", fontsize=11,
+        f"{'kept' if args.keep_self else 'excluded'}, "
+        f"coarse e-value {args.coarse_evalue:g}, search excl. DB load)",
+        fontsize=11,
     )
     mfig.tight_layout()
     metrics_png = args.out / "metrics.png"
@@ -549,6 +602,7 @@ def main() -> int:
                                  if args.cab_compress_seconds is not None else ""),
             "db_size_kb": f"{cab_db_kb:.2f}",
             "search_seconds": f"{cab_search_seconds:.3f}",
+            "search_seconds_std": f"{cab_search_std:.3f}",
             "total_hit_pairs": len(cab_scores),
             "true_positives": cab_tp,
             "missed_pairs": len(cab_missed),
@@ -568,6 +622,7 @@ def main() -> int:
                                  if args.hs_compress_seconds is not None else ""),
             "db_size_kb": f"{hs_db_kb:.2f}",
             "search_seconds": f"{hs_search_seconds:.3f}",
+            "search_seconds_std": f"{hs_search_std:.3f}",
             "total_hit_pairs": len(hs_scores),
             "true_positives": hs_tp,
             "missed_pairs": len(hs_missed),

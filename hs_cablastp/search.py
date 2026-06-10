@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -178,8 +179,17 @@ def search(
     keep_temp: bool = False,
     verbose: bool = False,
 ) -> Dict[str, object]:
-    """Run a full HS-CaBLASTP search; return a dict of results and stats."""
+    """Run a full HS-CaBLASTP search; return a dict of results and stats.
+
+    The returned dict carries a timing split so callers can compare *algorithm*
+    cost without the one-time DB-load overhead (which is a storage-format
+    artifact, not an algorithmic difference): ``load_seconds`` is the time to
+    deserialize the forest, ``search_seconds`` is everything after (coarse
+    BLAST + pruning + reconstruction + fine BLAST).
+    """
+    _t0 = time.perf_counter()
     db, params = load_db(db_dir)
+    _t_loaded = time.perf_counter()
 
     # --- Phase 2 Step 1: coarse search ---
     coarse_rows = _run_blastp(
@@ -242,6 +252,8 @@ def search(
                 "candidates": 0,
                 "fine_hits": [],
                 "matched_roots": len(matched_root_ids),
+                "load_seconds": _t_loaded - _t0,
+                "search_seconds": time.perf_counter() - _t_loaded,
             }
 
         fine_db_prefix = tmp_dir / "blastdb-fine"
@@ -284,6 +296,8 @@ def search(
             "matched_roots": len(matched_root_ids),
             "candidates": len(candidates),
             "fine_hits": fine_hits,
+            "load_seconds": _t_loaded - _t0,
+            "search_seconds": time.perf_counter() - _t_loaded,
         }
     finally:
         if not keep_temp:
