@@ -227,16 +227,20 @@ def run_cablastp_pipeline(
 
 def run_hs_cablastp_pipeline(
     query_fasta: Path, db_dir: Path, fine_evalue: float, coarse_evalue: float,
+    prune_threshold: float,
 ) -> Tuple[float, Dict[Pair, float]]:
     """Run hs-cablastp search in-process; return (search_seconds, hits).
 
     search() reports search_seconds with forest deserialization (load_db)
     already subtracted, so the timer excludes the same DB-load overhead excluded
-    for cablastp, and uses the same coarse e-value.
+    for cablastp, and uses the same coarse e-value. A higher prune_threshold
+    drops more of each hit subtree before the fine search, shrinking the
+    fine-candidate set (faster search) at some recall risk.
     """
     result = hs_search(
         query_fasta, db_dir,
         coarse_evalue=coarse_evalue, fine_evalue=fine_evalue,
+        prune_threshold=prune_threshold,
     )
     best: Dict[Pair, float] = {}
     for h in result["fine_hits"]:
@@ -358,6 +362,14 @@ def main() -> int:
                          "is 1e-3; forcing them equal removes a confound where one "
                          "pipeline casts a wider coarse net and so does more/less "
                          "fine-search work (search-time fairness).")
+    ap.add_argument("--prune-threshold", type=float, default=0.53,
+                    help="hs-cablastp tree-pruning threshold in [0,1] (default "
+                         "0.53). Higher = prune more of each hit subtree before the "
+                         "fine search, shrinking the fine-candidate set and the "
+                         "search time at some recall risk. 0.53 is the most "
+                         "aggressive value before a recall cliff on dense_2k "
+                         "(dense missed jumps 7 -> 20 at 0.54). search.py's library "
+                         "default stays 0.3.")
     ap.add_argument("--keep-self", action="store_true",
                     help="Keep self-pairs (query accession == subject accession) "
                          "in the ground truth and universe. By default they are "
@@ -419,6 +431,7 @@ def main() -> int:
     hs_search_seconds, hs_search_std, hs_scores = mean_search_time(
         run_hs_cablastp_pipeline,
         queries_path, args.hs_db, args.pipeline_evalue, args.coarse_evalue,
+        args.prune_threshold,
         reps=args.timing_reps,
     )
     print(f"[4/5] hs-cablastp: {len(hs_scores)} unique hit pairs "
